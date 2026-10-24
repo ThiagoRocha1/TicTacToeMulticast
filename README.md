@@ -86,14 +86,32 @@ O JSON **de jogada** preserva os nomes e os valores previstos no PDF:
 
 O encerramento deve informar **a ambos os jogadores** o status da partida e o vencedor, se houver. Em falha de conexão, pode ser impossível entregar a mensagem remota; registrar o erro e informar o participante local.
 
+**Novas decisões aprovadas em 24/10/2026:**
+
+- Cada partida terá um **`partidaId` único**, usado nas **mensagens de controle** para identificar a sessão. Seu formato e o procedimento de criação/troca entre jogadores ainda serão detalhados; **não acrescentar o campo à resposta RMI** sem nova aprovação.
+- O encerramento normal terá os eventos de controle **`fim`** e **`confirmacao_fim`**: após validar a jogada conclusiva, o adversário comunica o resultado por `fim`, e quem fez a jogada confirma por `confirmacao_fim`.
+- O campo **`vencedor`** terá valor **`1`** (X), **`2`** (O) ou **`null`** (sem vencedor). Seu uso em mensagens `fim` está aprovado. Os demais nomes de campos e os formatos completos de controle ainda não foram congelados.
+
+**Exemplos apenas ilustrativos** do protocolo acordado (não equivalem ao esquema JSON definitivo):
+
+```json
+{"tipo":"controle","evento":"fim","partidaId":"a7f3c92b","resultado":"vitoria","vencedor":1}
+```
+
+```json
+{"tipo":"controle","evento":"confirmacao_fim","partidaId":"a7f3c92b"}
+```
+
+Em empate ou erro, não há vencedor automático (`vencedor: null`). A confirmação pode não ser entregue se a conexão cair; cada jogador deverá tratar essa falha localmente.
+
 > **Diferença a documentar:** o PDF sugere devolver **a mesma mensagem** em caso de jogada inválida; a decisão atual prevê **mensagem de controle separada, explicativa**. A equivalência/compatibilidade com a intenção do professor deve ser verificada quando o protocolo for consolidado.
 
 ### 4. Timeout, falhas e displays
 
-- Na espera pela resposta do outro jogador, limite de **120 segundos**; ao esgotar, partida encerrada por **inatividade**.
+- Na espera por um adversário no **servidor de match**, limite de **300 segundos (5 minutos)**; ao esgotar, retirar a solicitação pendente da fila e informar timeout (formato do erro RMI ainda por definir).
+- Na espera pela resposta do outro jogador durante a partida, limite de **120 segundos (2 minutos)**; ao esgotar, partida encerrada por **inatividade**.
 - Falha durante a partida deve encerrá-la com **erro**, em vez de travar indefinidamente.
 - Falha ou ausência de display **não** pode bloquear a partida: publicação multicast é desacoplada.
-- A duração máxima da espera por adversário **no servidor de match** ainda não foi escolhida.
 - O escopo de tolerância a falhas abrange RMI indisponível, registros duplicados, fila concorrente, desconexão do oponente, JSON inválido, jogadas ilegais, problemas no multicast e encerramento de recursos.
 
 ### 5. Interoperabilidade

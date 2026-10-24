@@ -38,7 +38,10 @@ Estas instruções se aplicam à raiz de `TicTacToeMulticast` e às subpastas, a
 | `Numero` | Contador **global da partida**, `0..8`, apenas jogadas aceitas avançam |
 | Mensagens | JSON de jogada conforme PDF **mais JSON separado de controle** para rejeições/erros/encerramento |
 | Jogada inválida | Rejeitar, informar a causa e exigir refazer sem avançar o contador |
+| Identificação de sessão | Cada partida terá `partidaId` **único** nas mensagens JSON de controle; mecanismo de criação/troca ainda pendente |
 | Fim de partida | Informar status e vencedor (se existir) **aos dois jogadores**, dentro das limitações da rede |
+| Encerramento acordado | Eventos JSON de controle `fim` e `confirmacao_fim`; vencedor `1` (X), `2` (O) ou `null` (sem vencedor) |
+| Timeout de match | **300 segundos (5 minutos)**; remover registro pendente e informar timeout |
 | Timeout de espera de resposta | **120 segundos**; expiração encerra por inatividade |
 | Falha durante a partida | Encerrar com **erro** e liberar recursos |
 | Interoperabilidade | Entre componentes **do próprio sistema**, sem exigir teste com outros alunos |
@@ -68,11 +71,12 @@ A mensagem de jogada usa **exatamente** `Numero`, `Jogada`, `Tabuleiro`, `Result
 
 ## 5. Pendências que NÃO devem ser inventadas
 
-- Formato final dos **JSONs de controle** (campos, tipos, identificador de jogador, evento de encerramento).
-- Perspectiva de `Resultado` (`vit`/`der`), confirmação final, empate, significado de quem inicia como X/O (foi **proposto**, não confirmado como requisito definitivo).
+- Formato final dos **JSONs de controle** (campos e tipos restantes): `partidaId`, `fim`, `confirmacao_fim` e `vencedor` (1/2/null) já foram **aprovados**, mas o esquema completo ainda não.
+- **Criação e compartilhamento do `partidaId`** entre jogadores, sem alterar o JSON RMI do professor por conta própria.
+- Perspectiva de `Resultado` (`vit`/`der`), detalhes do empate/erro no evento `fim`, significado de quem inicia como X/O (foi **proposto**, não confirmado como requisito definitivo). A existência de `fim`/`confirmacao_fim` e `vencedor` 1/2/null **já está aprovada**.
 - Se `Tabuleiro` descreve o estado **antes ou depois** da jogada e como detectar inconsistências.
 - Enquadramento das mensagens TCP e extensão equivalente para UDP (JSON por linha foi **recomendado**, ainda não aprovado como regra final).
-- Timeout da espera por **match**, cancelamento/desistência, retries de RMI e registros duplicados.
+- O timeout de **match é 300 s, já aprovado**; ainda pendentes: formato de resposta/erro no timeout RMI, cancelamento/desistência, retries de RMI e registros duplicados.
 - Se uma rejeição de jogada reinicia o prazo de 120 segundos (a proposta anterior era **não reiniciar**, sem aceite explícito).
 - Versão e obtenção de `org.json`; montagem do classpath sem introduzir ferramenta não autorizada.
 - Número da porta de cada jogador, configuração de `java.rmi.server.hostname`, TTL/interface multicast e limitações das VMs.
@@ -86,7 +90,7 @@ Não implementar essas decisões pendentes silenciosamente.
 - **Sem JUnit, Mockito ou testes automatizados.** Testes **manuais** mediante execução dos módulos em terminais. Consultar antes de sugerir ferramentas como `nc` ou `tcpdump`.
 - Cada módulo deve ser executável pelo terminal com parâmetros configuráveis. Primeiro demonstrar `localhost`, depois VMs `152.92.236.14`, `.16`, `.17`.
 - Tratar em cada módulo: **o que pode falhar / reação esperada / roteiro manual para provocar a falha**.
-- Match: fila sincronizada, chamadas pendentes, cancelamento, duplicidade e timeout; RMI fora do ar e limites de tentativas.
+- Match: fila sincronizada, chamadas pendentes, cancelamento, duplicidade e timeout **fixado em 300 s**; RMI fora do ar e limites de tentativas.
 - TCP: desconexão do adversário, timeout de leitura, erro de mensagem, fechamento limpo; **120 s** esperando resposta do oponente.
 - UDP futuro: perda, duplicação, reordenação, ACK/reenvio com limite; usar `Numero` quando aplicável — **não implementar UDP antecipadamente**.
 - Mensagens: JSON malformado, campos faltantes, casa fora de `0..8`, ocupada, sequência errada, tabuleiro divergente, jogada fora de turno.
