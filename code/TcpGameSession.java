@@ -23,6 +23,7 @@ class TcpGameSession {
     private int localSymbol;
     private int opponentSymbol;
     private TicTacToeRules gameRules = new TicTacToeRules();
+    private Display displayPublisher;
 
     TcpGameSession(Socket opponentSocket, boolean startsMatch) throws IOException {
         this.opponentSocket = opponentSocket;
@@ -40,6 +41,7 @@ class TcpGameSession {
     }
 
     void play(boolean startsMatch) throws IOException {
+        displayPublisher = Display.openPublisher();
         try {
             exchangeSessionIdentifier(startsMatch);
             System.out.println("Conexão TCP estabelecida. Você joga com " + symbolName(localSymbol) + ".");
@@ -60,6 +62,10 @@ class TcpGameSession {
         } catch (IllegalArgumentException invalidMessage) {
             sendFailureWhenPossible("erro", invalidMessage.getMessage());
             throw new IOException("Mensagem de controle inválida: " + invalidMessage.getMessage(), invalidMessage);
+        } finally {
+            if (displayPublisher != null) {
+                displayPublisher.close();
+            }
         }
     }
 
@@ -144,6 +150,9 @@ class TcpGameSession {
                 continue;
             }
             gameRules = candidateRules;
+            if (displayPublisher != null) {
+                displayPublisher.publishMove(message);
+            }
             showBoard();
             if (gameRules.isGameOver()) {
                 String status = "vitoria";

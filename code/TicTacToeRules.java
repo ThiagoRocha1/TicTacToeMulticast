@@ -52,23 +52,25 @@ public class TicTacToeRules {
     }
 
     public int getWinner() {
+        if (hasWinningLine(board, X_SYMBOL)) {
+            return X_SYMBOL;
+        }
+        if (hasWinningLine(board, O_SYMBOL)) {
+            return O_SYMBOL;
+        }
+        return EMPTY_CELL;
+    }
+
+    static boolean hasWinningLine(int[] boardValues, int playerSymbol) {
         for (int lineIndex = 0; lineIndex < ROW_SIZE; lineIndex++) {
             int rowStart = lineIndex * ROW_SIZE;
-            int rowWinner = findLineWinner(rowStart, rowStart + 1, rowStart + 2);
-            if (rowWinner != EMPTY_CELL) {
-                return rowWinner;
-            }
-            int columnWinner = findLineWinner(lineIndex, lineIndex + 3, lineIndex + 6);
-            if (columnWinner != EMPTY_CELL) {
-                return columnWinner;
+            if (findLineWinner(boardValues, rowStart, rowStart + 1, rowStart + 2) == playerSymbol
+                    || findLineWinner(boardValues, lineIndex, lineIndex + 3, lineIndex + 6) == playerSymbol) {
+                return true;
             }
         }
-
-        int diagonalWinner = findLineWinner(0, 4, 8);
-        if (diagonalWinner != EMPTY_CELL) {
-            return diagonalWinner;
-        }
-        return findLineWinner(2, 4, 6);
+        return findLineWinner(boardValues, 0, 4, 8) == playerSymbol
+                || findLineWinner(boardValues, 2, 4, 6) == playerSymbol;
     }
 
     public boolean isDraw() {
@@ -79,7 +81,7 @@ public class TicTacToeRules {
         return getWinner() != EMPTY_CELL || isDraw();
     }
 
-    private int findLineWinner(int firstPosition, int secondPosition, int thirdPosition) {
+    private static int findLineWinner(int[] board, int firstPosition, int secondPosition, int thirdPosition) {
         int firstSymbol = board[firstPosition];
         if (firstSymbol != EMPTY_CELL
                 && firstSymbol == board[secondPosition]

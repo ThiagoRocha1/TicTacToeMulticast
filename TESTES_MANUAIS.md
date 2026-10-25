@@ -1,3 +1,5 @@
+> **Atualização multicast:** a versão atual inclui Display.java e Display funcional. Usar casos17/18 para integração. Roteiros anteriores que esperam Display reservado são históricos; testesTCP continuam válidos, mas sem MULTICAST_INTERFACE o publicador apenas avisa e o jogo continua.
+
 > **Atualização TCP (25/10/2026):** executar os casos 14 e 15 para a versão atual. Player agora abre a porta antes do RMI, aceita somente TCP e joga após o match. Casos 1–12 descrevem verificações anteriores do cliente de diagnóstico e são históricos: UDP/duplicidade via Player não reproduzem mais aquele fluxo; sucesso agora permanece na partida até o resultado. Casos de contrato RMI isolado devem usar JShell, como no caso 15. Caso 13 continua válido para regras locais. Não executar roteiros históricos como se fossem testes atuais completos.
 
 # Testes manuais do servidor de match
@@ -490,3 +492,110 @@ ls /tmp/tictactoe-separate-session/Player.class /tmp/tictactoe-separate-session/
 Esperado: nove fontes, incluindo Player.java e TcpGameSession.java separados; compilação concluída, com avisos unchecked possíveis. Sinais de falha: erro de compilação ou dependência de classe interna removida. Para provocar falha de distribuição, omitir TcpGameSession.java em uma pasta de implantação temporária limpa; a compilação deve acusar classe ausente. Não remover arquivos do workspace para esse ensaio.
 
 3. Para validar comportamento, repetir o caso14 usando /tmp/tictactoe-separate-session como classpath ou recompilar nas VMs conforme README. Compilação desta reorganização: **passou**; partidas: **não reexecutadas**.
+
+## Caso 17 — partida com múltiplos displays multicast
+
+Objetivo: verificar RMI, TCP e publicação/recepção multicast juntos. Pré-requisitos: JDK17, cinco terminais na raiz do projeto, interface lo ativa e portas1199/5121/6010/6011/8821 livres. Configuração abaixo é só local: TTL0 não deve ser usado como configuração remota. Não exige nc/tcpdump nem programa de teste automatizado.
+
+1. Terminal1 — compilar e iniciar match:
+
+```bash
+mkdir -p /tmp/tictactoe-multicast
+javac -encoding UTF-8 -d /tmp/tictactoe-multicast code/*.java
+RMI_HOST=127.0.0.1 RMI_REGISTRY_PORT=1199 RMI_OBJECT_PORT=5121 RMI_SERVICE_NAME=MatchServiceMulticast MATCH_TIMEOUT_SECONDS=300 java -cp /tmp/tictactoe-multicast MatchServer
+```
+
+2. Terminais2 e3 — executar o mesmo comando, um display em cada terminal:
+
+```bash
+MULTICAST_INTERFACE=lo MULTICAST_TTL=0 java -cp /tmp/tictactoe-multicast Display
+```
+
+Esperado: ambos informam que escutam225.1.1.21:8821 pela interface lo; permanecem ativos.
+
+3. Terminal4 — jogadorX:
+
+```bash
+PLAYER_IP=127.0.0.1 PLAYER_PORT=6010 PLAYER_PROTOCOL=tcp RMI_HOST=127.0.0.1 RMI_REGISTRY_PORT=1199 RMI_SERVICE_NAME=MatchServiceMulticast MULTICAST_INTERFACE=lo MULTICAST_TTL=0 java -cp /tmp/tictactoe-multicast Player
+```
+
+4. Terminal5 — jogadorO, dentro de300s:
+
+```bash
+PLAYER_IP=127.0.0.1 PLAYER_PORT=6011 PLAYER_PROTOCOL=tcp RMI_HOST=127.0.0.1 RMI_REGISTRY_PORT=1199 RMI_SERVICE_NAME=MatchServiceMulticast MULTICAST_INTERFACE=lo MULTICAST_TTL=0 java -cp /tmp/tictactoe-multicast Player
+```
+
+5. Digitar9 em X, depois jogar X0/O3/X1/O4/X2. Esperado:9 recusado no jogador, sem publicação; displays mostram exatamente as jogadas0..4 e vitória deX. Terminais4/5 mostram venceu/perdeu e encerram com saída0 (`echo $?`). Terminal1 e displays continuam ativos. Nenhuma confirmação de display é necessária.
+6. Reiniciar jogadores pelos mesmos comandos e jogar X0/O1. Fechar um display com Ctrl+C. Continuar X2/O4/X3/O5/X7/O6/X8. Esperado: partida continua, display restante mostra0..8 e empate; ambos os jogadores saem0. O display encerrado não recebe novas mensagens e não afeta o outro.
+7. Encerrar o display restante. Reiniciar X com MULTICAST_INTERFACE=interface_inexistente no comando do passo3; iniciar O normalmente. Jogar X0/O3/X1/O4/X2. Esperado: X avisa publicação indisponível, mas ambos concluem normalmente com saída0, sem display. Falha de publicação não equivale a falhaTCP.
+8. Em terminal livre executar:
+
+```bash
+MULTICAST_INTERFACE=interface_inexistente java -cp /tmp/tictactoe-multicast Display
+```
+
+Esperado: mensagem de configuração inválida e saída1, sem afetar servidor/jogadores. Para testar TTL inválido, substituir pela interface lo e MULTICAST_TTL=256; esperado rejeitar configuração. **TTL inválido não executado nesta etapa.**
+9. Encerrar match com Ctrl+C e todos os displays restantes. Se abandonar cliente antes de match, reiniciar apenas o servidor de teste isolado antes de repetir; pedido abandonado não é cancelado imediatamente.
+
+Sinais de falha: apenas um display consegue abrir a porta, snapshots inconsistentes, tentativa inválida exibida, falta de resultado após último datagrama recebido, encerramento do jogo causado por display ausente ou publicador mal configurado. A perda de um datagrama em outra rede não significa que a partidaTCP falhou; multicast não confirma entrega.
+
+Entre VMs: usar arquivos por máquina do README, manter grupo225.1.1.21/porta8821 e substituir lo pelo nome da interface real em cada .env. Escolher TTL compatível com a topologia, recompilar (`javac -encoding UTF-8 *.java`) e recarregar ambiente (`source ~/.bashrc`). Iniciar `java -cp . MatchServer` na.14, `java -cp . Display` nos terminais de display da.16/.17 e `java -cp . Player` em outro terminal de cada jogador. Repetir passos5–7. **Não executado entre VMs; TTL/interface definitivos não confirmados.**
+
+## Caso 18 — descarte de datagramas inválidos e recuperação
+
+Objetivo: assegurar que entrada inválida não encerra o Display. Pré-requisitos: compilação e displays do caso17 ativos em lo/TTL0, nenhuma partida em andamento; terminal extra com JDK17. Não enviar estes exemplos no grupo remoto compartilhado.
+
+1. No terminal extra iniciar:
+
+```bash
+jshell --execution local
+```
+
+2. Configurar emissor local e provocar falhas, digitando no JShell:
+
+```java
+java.net.MulticastSocket sender = new java.net.MulticastSocket();
+sender.setNetworkInterface(java.net.NetworkInterface.getByName("lo"));
+sender.setTimeToLive(0);
+java.net.InetAddress group = java.net.InetAddress.getByName("225.1.1.21");
+byte[] malformed = "{".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+sender.send(new java.net.DatagramPacket(malformed,malformed.length,group,8821));
+byte[] missingFields = "{}".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+sender.send(new java.net.DatagramPacket(missingFields,missingFields.length,group,8821));
+byte[] badEncoding = {(byte) 0xc3};
+sender.send(new java.net.DatagramPacket(badEncoding,badEncoding.length,group,8821));
+byte[] tooLarge = " ".repeat(16385).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+sender.send(new java.net.DatagramPacket(tooLarge,tooLarge.length,group,8821));
+byte[] inconsistent = "{\"Numero\":0,\"Jogada\":0,\"Tabuleiro\":[2,0,0,0,0,0,0,0,0],\"Resultado\":\"jog\"}".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+sender.send(new java.net.DatagramPacket(inconsistent,inconsistent.length,group,8821));
+```
+
+Esperado em cada display: cinco avisos de descarte (JSON inválido, campo ausente, UTF-8 inválido, tamanho excessivo, tabuleiro incompatível), sem encerramento. O JShell apenas envia; não recebe ACK.
+
+3. Ainda no JShell, enviar snapshot válido e fechar:
+
+```java
+byte[] valid = "{\"Numero\":0,\"Jogada\":0,\"Tabuleiro\":[1,0,0,0,0,0,0,0,0],\"Resultado\":\"jog\"}".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+sender.send(new java.net.DatagramPacket(valid,valid.length,group,8821));
+sender.close();
+/exit
+```
+
+Esperado: ambos os displays exibem jogada0 com X0 após os avisos e continuam ativos. Sinais de falha: mensagem inválida exibida como tabuleiro, erro derruba receptor ou pacote válido posterior não pode ser processado. Ao terminar, encerrar displays com Ctrl+C.
+
+Cenários ainda não executados: interface removida após abrir socket, falha real no envio, perda/reordenação/duplicação e início tardio. O Display mostra snapshots independentes, sem histórico ou separação de partidas simultâneas; não há promessa de recuperação de datagramas perdidos.
+
+## Caso 19 — métodos multicast diretamente em Display
+
+Objetivo: confirmar a reorganização sem classe interna ou arquivo MulticastChannel. Pré-requisitos: JDK17, terminal na raiz e pasta temporária nova.
+
+1. Compilar e conferir os fontes:
+
+```bash
+javac -encoding UTF-8 -d /tmp/tictactoe-display-methods code/*.java
+ls code
+```
+
+Esperado: nove fontes, métodos multicast na classe Display; nenhum MulticastChannel.java. Compilação passou com avisos unchecked esperados. Sinais de falha: classe ausente ou dependência do fonte removido. Para provocar falha de distribuição, omitir Display.java numa pasta temporária de implantação limpa e compilar os fontes do jogador: TcpGameSession deve acusar a classe ausente. Não remover fontes do workspace.
+
+2. Repetir casos17/18 com classpath /tmp/tictactoe-display-methods para partidas completas. **Partidas completas não reexecutadas nesta reorganização.** Uma verificação manual via JShell chamou Display.openPublisher, publishMove e close por reflexão e um processo Display separado recebeu/exibiu o snapshot X0 em lo/TTL0: **passou**. Os comandos de inicialização e as variáveis de ambiente dos casos17/18 permanecem válidos.

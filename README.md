@@ -2,7 +2,7 @@
 
 Projeto acadêmico de **Sistemas Distribuídos**: jogo da velha distribuído para dois jogadores, com pareamento por **Java RMI**, comunicação direta por **sockets TCP** (e, em uma fase posterior, UDP) e publicação das jogadas para um ou mais **displays multicast**.
 
-> **Estado atual (25/10/2026):** base do servidor de match importada para este workspace por pedido do responsável, com pareamento em `MatchServer.getOponent`. Mantidas as decisões anteriores desta pasta: utilitário JSON próprio, timeout de match de **300 s**, prazo de partida de **120 s**, compilação direta e testes manuais. As políticas de match foram aprovadas posteriormente pelo responsável; partida TCP aprovada e implementada posteriormente. Multicast e validação da partida nas VMs permanecem pendentes.
+> **Estado atual (25/10/2026):** base do servidor de match importada para este workspace por pedido do responsável, com pareamento em `MatchServer.getOponent`. Mantidas as decisões anteriores desta pasta: utilitário JSON próprio, timeout de match de **300 s**, prazo de partida de **120 s**, compilação direta e testes manuais. As políticas de match foram aprovadas posteriormente pelo responsável; partida TCP aprovada e implementada posteriormente. Publicação e Display multicast implementados na etapa seguinte; validação integrada nas VMs permanece pendente.
 
 ## Documentação para pessoas e agentes
 
@@ -123,7 +123,7 @@ O responsável definiu que a interoperabilidade será verificada **entre os comp
 | --- | --- |
 | Item 1 — entendimento, decisões e dúvidas | **Em consolidação; decisões atualizadas** |
 | Item 2 — funcionamento explicado ponta a ponta | **Aguardando confirmação explícita** |
-| Arquitetura e classes | Match, regras e sessão TCP separados; multicast pendente |
+| Arquitetura e classes | Match, regras e sessão TCP separados; publicação e Display multicast implementados |
 | Java do match | **Base implementada; políticas de match aprovadas, validação em andamento** |
 | Integração e testes | Resultados atuais na seção 9 e quadro da seção 7 de `PLANO_DO_PROJETO.md`; comandos em `TESTES_MANUAIS.md` |
 | `PLANO_DO_PROJETO.md` | **Registro de acompanhamento criado antecipadamente a pedido do responsável; isso não inicia o item 6** |
@@ -132,7 +132,7 @@ Leia [`PLANO_DO_PROJETO.md`](PLANO_DO_PROJETO.md) para pendências e **BLOCO DE 
 
 ## Base Java importada em 25/10/2026
 
-Os programas possuem entradas separadas: `MatchServer.java` executa o servidor e mantém a lógica em `MatchServer.getOponent`; `Player.java` executa a busca RMI e inicia a partida TCP pela classe `TcpGameSession` em arquivo separado, com mensagens validadas por `GameMessages` e regras em `TicTacToeRules`; `Display.java` é uma entrada reservada que informa que a recepção multicast ainda não foi implementada. `MatchService` é a interface remota; `JsonMessages` interpreta e valida as strings JSON via `JsonUtil`. O registro transportado é representado por `JsonMessages.PlayerRegistration`, distinto do programa Player. A antiga classe `Main` foi removida. `PendingMatchRequest` guarda jogador, prazo e resposta; a espera usa `wait`/`notifyAll`, sob um único monitor. Não são usadas lambdas, futures de arrays nem notação de generics; `final` é permitido somente para constantes nomeadas, conforme a seção 9 de `AGENTS.md`. As coleções usam casts explícitos; por isso o compilador pode informar operações unchecked.
+Os programas possuem entradas separadas: `MatchServer.java` executa o servidor e mantém a lógica em `MatchServer.getOponent`; `Player.java` executa a busca RMI e inicia a partida TCP pela classe `TcpGameSession` em arquivo separado, com mensagens validadas por `GameMessages` e regras em `TicTacToeRules`; `Display.java` recebe snapshots multicast e apresenta tabuleiro e resultado; `Display` configura e opera os sockets. `MatchService` é a interface remota; `JsonMessages` interpreta e valida as strings JSON via `JsonUtil`. O registro transportado é representado por `JsonMessages.PlayerRegistration`, distinto do programa Player. A antiga classe `Main` foi removida. `PendingMatchRequest` guarda jogador, prazo e resposta; a espera usa `wait`/`notifyAll`, sob um único monitor. Não são usadas lambdas, futures de arrays nem notação de generics; `final` é permitido somente para constantes nomeadas, conforme a seção 9 de `AGENTS.md`. As coleções usam casts explícitos; por isso o compilador pode informar operações unchecked.
 
 A compilação e a execução exigem somente o JDK 17. Os comandos usam `/tmp/tictactoe-classes` para manter apenas fontes em `code/`; após reiniciar a máquina ou limpar `/tmp`, recompilar. As rotinas de servidor, cliente e JSON foram separadas em métodos simples, com constantes nomeadas e erros de configuração explícitos em português.
 
@@ -173,7 +173,7 @@ Entrada reservada ao display:
 java -cp /tmp/tictactoe-classes Display
 ```
 
-No estado atual, mostra `Display multicast ainda não implementado.` e encerra; não abre socket. Tabuleiro e partida TCP estão implementados; publicação e recepção multicast continuam pendentes.
+Definir MULTICAST_INTERFACE antes de executar. Para teste local, usar `MULTICAST_INTERFACE=lo MULTICAST_TTL=0 java -cp /tmp/tictactoe-classes Display`. O programa permanece escutando e mostra os tabuleiros recebidos; Ctrl+C encerra o display. Podem existir várias instâncias.
 
 
 Ao atualizar uma VM da antiga assinatura byte[] para String, encerrar os processos Java antigos, atualizar os fontes correspondentes (incluindo `MatchService.java`), recompilar e reiniciar primeiro MatchServer e depois os Players. A interface compartilhada deve ter a mesma versão em todas as VMs. O nome do serviço e as variáveis de ambiente continuam iguais.
@@ -195,14 +195,35 @@ O responsável confirmou expressamente a proposta TCP nesta conversa. São escol
 - Rejeição: `{"evento":"rejeicao","partidaId":"UUID","motivo":"texto","refazer":true}`. Tabuleiro e contador preservados; prazo original de 120 s não reinicia. O emissor mantém uma cópia anterior para desfazer a tentativa rejeitada; a próxima jogada válida confirma implicitamente a sua jogada anterior.
 - Quem recebe uma jogada conclusiva valida e envia `{"evento":"fim","partidaId":"UUID","status":"vitoria","vencedor":1}`; status empate usa vencedor null. Autor da jogada valida e responde `{"evento":"confirmacao_fim","partidaId":"UUID"}`. Vitória usa vencedor 1/2. Cada espera de confirmação tem limite de 120 s.
 - Falha/inatividade: fim com status erro/inatividade, vencedor null e motivo, enviado quando possível; encerrar localmente com saída 1. Não há confirmação obrigatória para erro de rede nem garantia de entrega. Resultado normal confirmado termina com saída 0. EOF do terminal encerra por erro. Uma thread daemon simples lê a entrada enquanto a sessão observa a rede, permitindo detectar desconexão ou fim remoto durante a escolha humana.
-- Regras locais em TicTacToeRules; protocolo/validação em GameMessages; troca TCP/terminal em TcpGameSession; Player configura, busca match e abre conexão. Display/multicast continuam pendentes.
+- Regras locais em TicTacToeRules; protocolo/validação em GameMessages; troca TCP/terminal em TcpGameSession; Player configura, busca match e abre conexão. Publicação e Display multicast implementados na etapa seguinte, conforme seção abaixo.
 
 ## Arquivos para executar a versão TCP nas VMs
 
 Na pasta única ~/tictactoe da VM .14: MatchServer.java, MatchService.java, JsonMessages.java, JsonUtil.java e a configuração .env do servidor.
 
-Na pasta ~/tictactoe de cada VM jogadora (.16 e .17): Player.java, MatchService.java, JsonMessages.java, JsonUtil.java, TicTacToeRules.java, GameMessages.java, TcpGameSession.java e a configuração .env daquele jogador. Display.java pode permanecer junto ao jogador, mas ainda não recebe multicast.
+Na pasta ~/tictactoe de cada VM jogadora (.16 e .17): Player.java, MatchService.java, JsonMessages.java, JsonUtil.java, TicTacToeRules.java, GameMessages.java, TcpGameSession.java, Display.java e a configuração .env daquele jogador. Display.java pode ficar na mesma pasta e executar em outro terminal de cada jogador.
 
 Recompilar com `javac -encoding UTF-8 *.java` em cada máquina. Iniciar `java -cp . MatchServer` na .14 e depois `java -cp . Player` na .16 e .17. PLAYER_IP deve ser local à própria VM e PLAYER_PORT deve estar disponível/acessível ao adversário. Roteiro completo e resultados esperados no caso 14 de TESTES_MANUAIS.md. Não executar processos antigos com arquivos novos.
 
 Por decisão mais recente do responsável, TcpGameSession permanece em code/TcpGameSession.java, separado de Player.java. Distribuir ambos aos jogadores e compilar juntos com os demais fontes; executar Player normalmente.
+
+## Multicast implementado
+
+A etapa solicitada inclui publicação e Display. `Display.java` concentra configuração e sockets. Após validar a jogada recebida por TCP, o adversário publica aquele JSON uma vez; assim, tentativas rejeitadas não são transmitidas ao display. Essa é uma escolha de implementação desta etapa, não uma regra textual do professor. Os quatro campos permanecem Numero/Jogada/Tabuleiro/Resultado; Resultado mantém a perspectiva do autor da jogada TCP, não de quem publica o datagrama.
+
+O Display valida cada snapshot independentemente (campos, tipos, contagem de peças, última casa, vencedor e resultado), exibe o tabuleiro e continua escutando após o fim de uma partida. Pode iniciar no meio do jogo: a próxima mensagem já contém o tabuleiro completo. Não reconstrói histórico, não solicita reenvio e não separa partidas simultâneas pelo mesmo canal, pois o JSON de jogada não contém partidaId. Datagrama perdido pode ser compensado visualmente pelo snapshot seguinte, mas não há garantia de entrega, ordem ou ausência de duplicação. Não altera o protocolo TCP nem adiciona partidaId às jogadas.
+
+| Variável | Configuração |
+| --- | --- |
+| MULTICAST_GROUP | Padrão aprovado 225.1.1.21; ajustável para testes isolados |
+| MULTICAST_PORT | Padrão aprovado 8821; inteiro 1..65535 |
+| MULTICAST_INTERFACE | Nome obrigatório da interface local, diferente conforme a máquina |
+| MULTICAST_TTL | Inteiro 0..255, padrão operacional 1; 0 para teste somente local |
+
+Interface e TTL definitivos das VMs continuam sujeitos à verificação da rede. Nos testes desta etapa foi usado MULTICAST_INTERFACE=lo e MULTICAST_TTL=0, sem transmitir para outras máquinas. Loopback multicast fica habilitado, permitindo display e jogador na mesma máquina. Múltiplos displays compartilham a porta com SO_REUSEADDR configurado antes de bind.
+
+No Player, configuração/envio multicast com falha gera aviso e desativa a publicação, sem encerrar a partida TCP. Não há espera por displays nem ACK multicast. Os sockets de publicação são fechados ao terminar a sessão. No Display, falha ao abrir/receber no socket encerra o processo com saída1; JSON/UTF-8 inválido, campos inconsistentes ou datagrama acima de16384bytes são descartados com aviso, sem encerrar o receptor.
+
+Para uma máquina apenas de display, em ~/tictactoe: Display.java, GameMessages.java, TicTacToeRules.java, JsonUtil.java e .env com a interface local. O display não precisa de MatchServer, Player nem RMI.
+
+Nas VMs jogadoras, acrescentar ao .env `MULTICAST_INTERFACE` com o nome real da interface da própria VM e `MULTICAST_TTL` apropriado à rede (1 é um ponto inicial, não comprova roteamento entre VMs). Preservar grupo225.1.1.21 e porta8821. Recompilar com `javac -encoding UTF-8 *.java`, recarregar o ambiente e executar `java -cp . Display` em terminal separado. Iniciar displays antes dos jogadores para acompanhar a partida completa. Roteiros locais completos: casos17/18 de TESTES_MANUAIS.md.

@@ -7,7 +7,7 @@ Estas instruções se aplicam à raiz de `TicTacToeMulticast` e às subpastas, a
 - Em 25/10/2026, nesta conversa, o responsável pediu a implementação do servidor de match, o pareamento dentro de `Main` e o uso do workspace `/home/thiago/Desktop/TicTacToeMulticast`.
 - Posteriormente, o responsável pediu separar os programas: `MatchServer.java`, `Player.java` e `Display.java`. Isso substitui a organização anterior em `Main`: lógica de match em `MatchServer.getOponent`; `Player` contém a busca RMI existente; `Display` é somente uma entrada reservada, com aviso de funcionalidade ainda não implementada. Essa reorganização originalmente não incluía jogo/multicast; posteriormente o responsável aprovou a partida TCP descrita na seção 5.
 - Em seguida, determinou expressamente usar as decisões já existentes nesta pasta. Elas prevalecem sobre as sugestões do protótipo: **300 s para match**, **120 s durante a partida**, **utilitário JSON próprio (pedido posterior substitui org.json)**, `javac`/`java` e **testes manuais**.
-- A importação do código foi autorizada. Posteriormente o responsável aprovou as políticas de match da seção 3.1; essas políticas não estão mais pendentes. As decisões TCP foram aprovadas posteriormente, conforme seção 5; multicast e ambiente remoto permanecem pendentes.
+- A importação do código foi autorizada. Posteriormente o responsável aprovou as políticas de match da seção 3.1; essas políticas não estão mais pendentes. As decisões TCP foram aprovadas posteriormente, conforme seção 5; o responsável solicitou agora a fase multicast; publicação e Display foram implementados. Validação remota permanece pendente.
 - O bloqueio histórico de implementação foi superado para o código de match solicitado nesta conversa. Novos módulos exigem escopo próprio.
 - Não importar Maven, Gson, JUnit ou scripts de testes automatizados. Não alterar as decisões anteriores sem pedido do responsável.
 
@@ -102,7 +102,7 @@ O responsável confirmou expressamente a proposta TCP nesta conversa. São escol
 - Rejeição: `{"evento":"rejeicao","partidaId":"UUID","motivo":"texto","refazer":true}`. Tabuleiro e contador preservados; prazo original de 120 s não reinicia. O emissor mantém uma cópia anterior para desfazer a tentativa rejeitada; a próxima jogada válida confirma implicitamente a sua jogada anterior.
 - Quem recebe uma jogada conclusiva valida e envia `{"evento":"fim","partidaId":"UUID","status":"vitoria","vencedor":1}`; status empate usa vencedor null. Autor da jogada valida e responde `{"evento":"confirmacao_fim","partidaId":"UUID"}`. Vitória usa vencedor 1/2. Cada espera de confirmação tem limite de 120 s.
 - Falha/inatividade: fim com status erro/inatividade, vencedor null e motivo, enviado quando possível; encerrar localmente com saída 1. Não há confirmação obrigatória para erro de rede nem garantia de entrega. Resultado normal confirmado termina com saída 0. EOF do terminal encerra por erro. Uma thread daemon simples lê a entrada enquanto a sessão observa a rede, permitindo detectar desconexão ou fim remoto durante a escolha humana.
-- Regras locais em TicTacToeRules; protocolo/validação em GameMessages; troca TCP/terminal em TcpGameSession; Player configura, busca match e abre conexão. Display/multicast continuam pendentes.
+- Regras locais em TicTacToeRules; protocolo/validação em GameMessages; troca TCP/terminal em TcpGameSession; Player configura, busca match e abre conexão. Publicação e Display multicast implementados posteriormente, conforme seção 8.
 
 ## 6. Regras de engenharia e falhas
 
@@ -136,12 +136,31 @@ O responsável confirmou expressamente a proposta TCP nesta conversa. São escol
 
 ## 8. Estado atual e próxima ação
 
+- Pedido mais recente: métodos multicast diretamente na classe Display, sem classe interna ou fonte MulticastChannel separado. TcpGameSession usa Display.openPublisher e uma instância própria de Display para publicar; executar o programa Display continua opcional para a partida.
+
 - Decisão mais recente do responsável: manter TcpGameSession no arquivo separado code/TcpGameSession.java. Esta decisão substitui a reorganização anterior como classe interna. Regras permanecem em TicTacToeRules.java.
 
 - Nove fontes diretamente em code: MatchServer, MatchService, Player, Display, JsonMessages, JsonUtil, TicTacToeRules, GameMessages e TcpGameSession. Somente JDK 17; RMI usa String; nenhuma biblioteca externa.
-- Match preservado. Player agora joga uma partida TCP após RMI; não aceita protocolo UDP. Regras separadas, sem JSON/rede na classe TicTacToeRules. Display ainda é entrada reservada.
+- Match preservado. Player agora joga uma partida TCP após RMI; não aceita protocolo UDP. Regras separadas, sem JSON/rede na classe TicTacToeRules. Display recebe e valida snapshots multicast.
 - Verificações manuais localhost: vitória X, vitória O e empate com resultado nos dois terminais; entrada inválida, casa ocupada/fora do intervalo; rejeição remota com rollback e repetição de Numero; sequência/tabuleiro divergentes rejeitados e correção aceita; desconexão durante entrada humana; prazo real de 120 s com encerramento dos dois jogadores. Compilação passou com avisos unchecked esperados.
-- Testes atuais e históricos distinguidos no plano; VMs e multicast não foram testados nesta implementação. Próximo passo: repetir a partida TCP nas VMs; depois implementar publicação/recepção multicast em etapa própria. Não declarar o trabalho completo sem multicast.
+- Multicast verificado manualmente em loopback: dois displays, vitória, empate, fechamento de display sem afetar jogo, partida sem display com configuração inválida de publicador, descarte de JSON/campos/UTF-8/tamanho/tabuleiro inválidos e recuperação em pacote válido. VMs, perda/reordenação e falha real de envio não testadas. Próximo passo: validar integração e configuração nas VMs. Roteiros17/18 e resultados no plano.
+
+## Multicast implementado
+
+A etapa solicitada inclui publicação e Display. `Display.java` concentra configuração e sockets. Após validar a jogada recebida por TCP, o adversário publica aquele JSON uma vez; assim, tentativas rejeitadas não são transmitidas ao display. Essa é uma escolha de implementação desta etapa, não uma regra textual do professor. Os quatro campos permanecem Numero/Jogada/Tabuleiro/Resultado; Resultado mantém a perspectiva do autor da jogada TCP, não de quem publica o datagrama.
+
+O Display valida cada snapshot independentemente (campos, tipos, contagem de peças, última casa, vencedor e resultado), exibe o tabuleiro e continua escutando após o fim de uma partida. Pode iniciar no meio do jogo: a próxima mensagem já contém o tabuleiro completo. Não reconstrói histórico, não solicita reenvio e não separa partidas simultâneas pelo mesmo canal, pois o JSON de jogada não contém partidaId. Datagrama perdido pode ser compensado visualmente pelo snapshot seguinte, mas não há garantia de entrega, ordem ou ausência de duplicação. Não altera o protocolo TCP nem adiciona partidaId às jogadas.
+
+| Variável | Configuração |
+| --- | --- |
+| MULTICAST_GROUP | Padrão aprovado 225.1.1.21; ajustável para testes isolados |
+| MULTICAST_PORT | Padrão aprovado 8821; inteiro 1..65535 |
+| MULTICAST_INTERFACE | Nome obrigatório da interface local, diferente conforme a máquina |
+| MULTICAST_TTL | Inteiro 0..255, padrão operacional 1; 0 para teste somente local |
+
+Interface e TTL definitivos das VMs continuam sujeitos à verificação da rede. Nos testes desta etapa foi usado MULTICAST_INTERFACE=lo e MULTICAST_TTL=0, sem transmitir para outras máquinas. Loopback multicast fica habilitado, permitindo display e jogador na mesma máquina. Múltiplos displays compartilham a porta com SO_REUSEADDR configurado antes de bind.
+
+No Player, configuração/envio multicast com falha gera aviso e desativa a publicação, sem encerrar a partida TCP. Não há espera por displays nem ACK multicast. Os sockets de publicação são fechados ao terminar a sessão. No Display, falha ao abrir/receber no socket encerra o processo com saída1; JSON/UTF-8 inválido, campos inconsistentes ou datagrama acima de16384bytes são descartados com aviso, sem encerrar o receptor.
 
 ## 9. Estilo do responsável e nível de Java
 
