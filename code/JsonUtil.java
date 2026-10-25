@@ -4,7 +4,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** Conversão JSON usando apenas o JDK. Limita o aninhamento a 32 níveis. */
 class JsonUtil {
     private static final int MAX_NESTING_DEPTH = 32;
     private static final String JSON_NUMBER_PATTERN = "-?(0|[1-9][0-9]*)(\\.[0-9]+)?([eE][+-]?[0-9]+)?";
@@ -180,7 +179,6 @@ class JsonUtil {
             return readNumber();
         }
 
-        // A abertura do objeto ou da lista já foi consumida por readValue.
         private Map readObject(int nestingDepth) {
             Map jsonObject = new LinkedHashMap();
             skipWhitespace();
@@ -273,7 +271,6 @@ class JsonUtil {
                 }
                 char escapeCharacter = jsonText.charAt(currentPosition++);
                 switch (escapeCharacter) {
-                    // Esses três escapes representam o próprio caractere.
                     case '"':
                     case '\\':
                     case '/':

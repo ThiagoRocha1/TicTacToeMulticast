@@ -9,7 +9,14 @@ public class TicTacToeRules {
     private int acceptedMoveCount;
     private int lastPlayedSymbol = EMPTY_CELL;
 
-    // A sessão informa o símbolo; a associação entre jogador e X/O é externa.
+    public TicTacToeRules() {}
+
+    public TicTacToeRules(TicTacToeRules previousRules) {
+        board = previousRules.getBoardCopy();
+        acceptedMoveCount = previousRules.acceptedMoveCount;
+        lastPlayedSymbol = previousRules.lastPlayedSymbol;
+    }
+
     public void placeMove(int cellPosition, int playerSymbol) {
         if (playerSymbol != X_SYMBOL && playerSymbol != O_SYMBOL) {
             throw new IllegalArgumentException("O símbolo deve ser 1 (X) ou 2 (O)");
@@ -36,7 +43,6 @@ public class TicTacToeRules {
         return acceptedMoveCount;
     }
 
-    // Uma cópia impede que outro módulo altere o tabuleiro sem validação.
     public int[] getBoardCopy() {
         int[] boardCopy = new int[BOARD_SIZE];
         for (int cellPosition = 0; cellPosition < BOARD_SIZE; cellPosition++) {

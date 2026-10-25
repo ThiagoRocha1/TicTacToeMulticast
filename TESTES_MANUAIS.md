@@ -1,3 +1,5 @@
+> **Atualização TCP (25/10/2026):** executar os casos 14 e 15 para a versão atual. Player agora abre a porta antes do RMI, aceita somente TCP e joga após o match. Casos 1–12 descrevem verificações anteriores do cliente de diagnóstico e são históricos: UDP/duplicidade via Player não reproduzem mais aquele fluxo; sucesso agora permanece na partida até o resultado. Casos de contrato RMI isolado devem usar JShell, como no caso 15. Caso 13 continua válido para regras locais. Não executar roteiros históricos como se fossem testes atuais completos.
+
 # Testes manuais do servidor de match
 
 Os formatos de erro, duplicidade, ordem de início, desistência por timeout e ausência de retries automáticos foram aprovados pelo responsável. O JSON no transporte permanece como documentado; o cliente agora mostra mensagens legíveis e encerra erros com saída 1. Não há garantia de entrega a clientes desconectados.
@@ -361,3 +363,130 @@ draw.getAcceptedMoveCount()
 ```
 
 Esperado: true, 0 e 9. Sinais de falha: rejeição altera estado/contador, cópia altera original, vitória não identificada, empate com vencedor, ou jogada aceita após encerramento. A verificação local não comprova rede nem os JSONs da partida.
+
+## Caso 14 — partida TCP completa após RMI
+
+Objetivo: confirmar conexão, turnos, resultado em ambos os jogadores e encerramento normal. Pré-requisitos: JDK 17, três terminais na raiz do projeto, portas locais 1199, 5121, 6010 e 6011 disponíveis. Nenhum display necessário. Os exemplos de portas não fixam portas das VMs.
+
+1. Terminal 1 — compilar e iniciar match:
+
+```bash
+mkdir -p /tmp/tictactoe-tcp
+javac -encoding UTF-8 -d /tmp/tictactoe-tcp code/*.java
+RMI_HOST=127.0.0.1 RMI_REGISTRY_PORT=1199 RMI_OBJECT_PORT=5121 RMI_SERVICE_NAME=MatchServiceTcp MATCH_TIMEOUT_SECONDS=300 java -cp /tmp/tictactoe-tcp MatchServer
+```
+
+2. Terminal 2 — iniciar primeiro jogador (X):
+
+```bash
+PLAYER_IP=127.0.0.1 PLAYER_PORT=6010 PLAYER_PROTOCOL=tcp RMI_HOST=127.0.0.1 RMI_REGISTRY_PORT=1199 RMI_SERVICE_NAME=MatchServiceTcp java -cp /tmp/tictactoe-tcp Player
+```
+
+3. Terminal 3 — iniciar segundo jogador (O), dentro de 300 s:
+
+```bash
+PLAYER_IP=127.0.0.1 PLAYER_PORT=6011 PLAYER_PROTOCOL=tcp RMI_HOST=127.0.0.1 RMI_REGISTRY_PORT=1199 RMI_SERVICE_NAME=MatchServiceTcp java -cp /tmp/tictactoe-tcp Player
+```
+
+Esperado: terminal 1 mantém Registry ativo; terminais 2/3 mostram mesmo UUID e símbolos X/O, respectivamente. X escolhe a casa; O aguarda. Cada entrada abaixo é digitada apenas no jogador indicado, seguida de Enter. Efetuar cada jogada dentro de 120 s.
+
+4. Vitória X: terminal 2 digita 0; terminal 3 digita 3; terminal 2 digita 1; terminal 3 digita 4; terminal 2 digita 2. Esperado: tabuleiros iguais, terminal 2 venceu, terminal 3 perdeu; ambos encerram com saída 0. Conferir `echo $?` após cada processo. Terminal 1 continua ativo.
+5. Reiniciar os dois jogadores pelos mesmos comandos e testar vitória O: X0, O3, X1, O4, X8, O5. Esperado: X perdeu e O venceu, saídas 0.
+6. Reiniciar jogadores e testar empate: X0, O1, X2, O4, X3, O5, X7, O6, X8. Esperado: empate nos dois terminais e saídas 0.
+7. Provocar falhas de entrada em nova partida: em X digitar abc, 9 e depois 0; em O digitar 0 e depois 3. Esperado: número inválido, casa fora do intervalo e casa ocupada são recusados; primeira jogada efetiva continua X0, segunda O3. Para encerrar este ensaio, Ctrl+C em um jogador; o outro deve detectar desconexão e sair com 1, mesmo aguardando o teclado.
+8. Reiniciar jogadores e não digitar nada em X. Esperado após aproximadamente 120 s: O informa inatividade e encerra; X recebe fim remoto enquanto espera teclado e também encerra; saídas 1. Não reduzir prazo neste caso.
+9. Para provocar EOF, iniciar outra partida e pressionar Ctrl+D no terminal da vez em uma linha vazia. Esperado: erro local, tentativa de avisar adversário e saída 1. **Este caso EOF ainda não foi executado pelo agente.**
+10. Encerrar servidor de teste com Ctrl+C. Se houver clientes abandonados durante o match, reiniciar o servidor de teste isolado antes de repetir; a política aprovada não cancela imediatamente pedidos abandonados.
+
+Sinais de falha: tabuleiros divergentes, dois participantes jogando como X, resultado normal com saída 1, falta de confirmação final, jogador bloqueado após timeout/desconexão, ou erro de entrada avançando contador.
+
+Nas VMs: usar a distribuição de arquivos do README em ~/tictactoe; em cada máquina executar `cd ~/tictactoe`, `javac -encoding UTF-8 *.java` e `source ~/.bashrc`. Na .14 executar `java -cp . MatchServer`; na .16 e depois .17 executar `java -cp . Player`. Usar PLAYER_IP da própria VM, portas disponíveis e acessíveis entre jogadores, Registry9821 e a configuração do serviço já preparada. Repetir passos 4–8; resultados TCP nas VMs ainda **não executados** nesta etapa.
+
+## Caso 15 — rejeição, correção e falha de protocolo por TCP
+
+Objetivo: verificar o wire manualmente usando JShell como adversário. Pré-requisitos: compilação/servidor do caso 14, fila vazia, portas 6022/6023 livres, terminais separados para Player e JShell. Não há programa de teste automatizado.
+
+1. No terminal do jogador:
+
+```bash
+PLAYER_IP=127.0.0.1 PLAYER_PORT=6022 PLAYER_PROTOCOL=tcp RMI_HOST=127.0.0.1 RMI_REGISTRY_PORT=1199 RMI_SERVICE_NAME=MatchServiceTcp java -cp /tmp/tictactoe-tcp Player
+```
+
+2. Em outro terminal iniciar:
+
+```bash
+jshell --execution local
+```
+
+3. No JShell carregar a interface e registrar o adversário. O contexto de classloader e a chamada RMI devem estar no mesmo bloco, pois o JShell executa snippets em threads próprias:
+
+```java
+java.net.URLClassLoader loader = new java.net.URLClassLoader(new java.net.URL[]{new java.io.File("/tmp/tictactoe-tcp").toURI().toURL()});
+java.net.ServerSocket listener = new java.net.ServerSocket(6023);
+{ Thread.currentThread().setContextClassLoader(loader); Object service = java.rmi.registry.LocateRegistry.getRegistry("127.0.0.1",1199).lookup("MatchServiceTcp"); System.out.println(loader.loadClass("MatchService").getMethod("getOponent",String.class).invoke(service,"{\"ip\":\"127.0.0.1\",\"porta\":6023,\"protocolo\":\"tcp\"}")); }
+java.net.Socket peer = listener.accept();
+peer.setSoTimeout(10000);
+java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(peer.getInputStream(),java.nio.charset.StandardCharsets.UTF_8));
+java.io.PrintWriter writer = new java.io.PrintWriter(new java.io.OutputStreamWriter(peer.getOutputStream(),java.nio.charset.StandardCharsets.UTF_8),true);
+String initial = reader.readLine();
+String id = initial.split("\"partidaId\":\"")[1].split("\"")[0];
+System.out.println(initial);
+```
+
+Esperado: resposta RMI inicia=false para JShell e controle inicio com UUID. O Player joga com X. Não deixar este diagnóstico parado por 120 s entre os passos, salvo ao testar expiração deliberadamente.
+
+4. No Player digitar 0. No JShell ler e rejeitar:
+
+```java
+System.out.println(reader.readLine());
+writer.println("{\"partidaId\":\""+id+"\",\"evento\":\"rejeicao\",\"motivo\":\"Correção manual\",\"refazer\":true}");
+```
+
+Esperado: Numero0, X na casa0; depois Player explica rejeição e restaura tabuleiro vazio. No Player digitar 1. No JShell:
+
+```java
+System.out.println(reader.readLine());
+writer.println("{\"Numero\":5,\"Jogada\":0,\"Tabuleiro\":[2,1,0,0,0,0,0,0,0],\"Resultado\":\"jog\"}");
+System.out.println(reader.readLine());
+writer.println("{\"Numero\":1,\"Jogada\":0,\"Tabuleiro\":[0,1,0,0,0,0,0,0,0],\"Resultado\":\"jog\"}");
+System.out.println(reader.readLine());
+writer.println("{\"Numero\":1,\"Jogada\":0,\"Tabuleiro\":[2,1,0,0,0,0,0,0,0],\"Resultado\":\"jog\"}");
+```
+
+Esperado: nova tentativa X1 ainda Numero0, sem X0. Receber duas rejeições explicativas com mesmo partidaId e refazer true: sequência incorreta e tabuleiro divergente. Correção O0/Numero1 aceita, Player mostra O0/X1 e pede próxima jogada.
+
+5. No JShell fechar:
+
+```java
+peer.close();
+listener.close();
+/exit
+```
+
+Esperado: Player detecta encerramento mesmo aguardando teclado, sai1. Sinais de falha: X0 mantido após rejeição, contador avança na tentativa corrigida, tabuleiro inválido aceito, motivo ausente ou bloqueio após desconexão.
+
+6. Cenários adicionais, cada um em uma sessão nova preparada pelos passos1–3: enviar `writer.println("{");` para provocar JSON ilegível; enviar objeto de jogada sem campos; enviar Numero/Jogada fracionários; enviar controle com partidaId divergente. Esperado: JSON ilegível ou controle incompatível encerram com erro; jogada legível inválida recebe rejeição. Para mensagem incompleta, usar `writer.print("{"); writer.flush();` e aguardar120s sem finalizar linha: deve expirar. Para limite usar `writer.println(" ".repeat(16385));`: deve encerrar por erro. **Esses cenários adicionais ainda não foram executados em rede pelo agente.**
+7. Para verificar prazo preservado, repetir passo4 com rejeições/correções espaçadas até superar120s a partir da primeira tentativa, sem reiniciar sessão. Esperado: expiração sem conceder outro prazo integral. **Não executado nesta etapa.**
+
+Ao terminar, fechar JShell e servidor de teste. Não usar esses comandos de injeção num serviço compartilhado das VMs.
+
+## Caso 16 — sessão TCP em arquivo separado
+
+Objetivo: confirmar compilação de Player com TcpGameSession em arquivo separado. Pré-requisitos: JDK17 e terminal na raiz do projeto. Não exige rede.
+
+1. Compilar em pasta temporária nova:
+
+```bash
+javac -encoding UTF-8 -d /tmp/tictactoe-separate-session code/*.java
+```
+
+2. Conferir fontes e classes geradas:
+
+```bash
+ls code
+ls /tmp/tictactoe-separate-session/Player.class /tmp/tictactoe-separate-session/TcpGameSession.class
+```
+
+Esperado: nove fontes, incluindo Player.java e TcpGameSession.java separados; compilação concluída, com avisos unchecked possíveis. Sinais de falha: erro de compilação ou dependência de classe interna removida. Para provocar falha de distribuição, omitir TcpGameSession.java em uma pasta de implantação temporária limpa; a compilação deve acusar classe ausente. Não remover arquivos do workspace para esse ensaio.
+
+3. Para validar comportamento, repetir o caso14 usando /tmp/tictactoe-separate-session como classpath ou recompilar nas VMs conforme README. Compilação desta reorganização: **passou**; partidas: **não reexecutadas**.

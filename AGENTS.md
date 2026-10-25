@@ -5,9 +5,9 @@ Estas instruções se aplicam à raiz de `TicTacToeMulticast` e às subpastas, a
 ## 1. Estado atual e autorização vigente
 
 - Em 25/10/2026, nesta conversa, o responsável pediu a implementação do servidor de match, o pareamento dentro de `Main` e o uso do workspace `/home/thiago/Desktop/TicTacToeMulticast`.
-- Posteriormente, o responsável pediu separar os programas: `MatchServer.java`, `Player.java` e `Display.java`. Isso substitui a organização anterior em `Main`: lógica de match em `MatchServer.getOponent`; `Player` contém a busca RMI existente; `Display` é somente uma entrada reservada, com aviso de funcionalidade ainda não implementada. Não antecipar jogo ou multicast nesta reorganização.
+- Posteriormente, o responsável pediu separar os programas: `MatchServer.java`, `Player.java` e `Display.java`. Isso substitui a organização anterior em `Main`: lógica de match em `MatchServer.getOponent`; `Player` contém a busca RMI existente; `Display` é somente uma entrada reservada, com aviso de funcionalidade ainda não implementada. Essa reorganização originalmente não incluía jogo/multicast; posteriormente o responsável aprovou a partida TCP descrita na seção 5.
 - Em seguida, determinou expressamente usar as decisões já existentes nesta pasta. Elas prevalecem sobre as sugestões do protótipo: **300 s para match**, **120 s durante a partida**, **utilitário JSON próprio (pedido posterior substitui org.json)**, `javac`/`java` e **testes manuais**.
-- A importação do código foi autorizada. Posteriormente o responsável aprovou as políticas de match da seção 3.1; essas políticas não estão mais pendentes. Continuam abertas as decisões de partida e ambiente indicadas na seção 5.
+- A importação do código foi autorizada. Posteriormente o responsável aprovou as políticas de match da seção 3.1; essas políticas não estão mais pendentes. As decisões TCP foram aprovadas posteriormente, conforme seção 5; multicast e ambiente remoto permanecem pendentes.
 - O bloqueio histórico de implementação foi superado para o código de match solicitado nesta conversa. Novos módulos exigem escopo próprio.
 - Não importar Maven, Gson, JUnit ou scripts de testes automatizados. Não alterar as decisões anteriores sem pedido do responsável.
 
@@ -39,7 +39,7 @@ Estas instruções se aplicam à raiz de `TicTacToeMulticast` e às subpastas, a
 | `Numero` | Contador **global da partida**, `0..8`, apenas jogadas aceitas avançam |
 | Mensagens | JSON de jogada conforme PDF **mais JSON separado de controle** para rejeições/erros/encerramento |
 | Jogada inválida | Rejeitar, informar a causa e exigir refazer sem avançar o contador |
-| Identificação de sessão | Cada partida terá `partidaId` **único** nas mensagens JSON de controle; mecanismo de criação/troca ainda pendente |
+| Identificação de sessão | Cada partida terá `partidaId` **único** nas mensagens JSON de controle; UUID criado pelo iniciador e enviado no controle inicio pelo TCP |
 | Fim de partida | Informar status e vencedor (se existir) **aos dois jogadores**, dentro das limitações da rede |
 | Encerramento acordado | Eventos JSON de controle `fim` e `confirmacao_fim`; vencedor `1` (X), `2` (O) ou `null` (sem vencedor) |
 | Timeout de match | **300 segundos (5 minutos)**; remover registro pendente e informar timeout |
@@ -89,16 +89,20 @@ A mensagem de jogada usa **exatamente** `Numero`, `Jogada`, `Tabuleiro`, `Result
 
 ## 5. Pendências que NÃO devem ser inventadas
 
-- Formato final dos **JSONs de controle** (campos e tipos restantes): `partidaId`, `fim`, `confirmacao_fim` e `vencedor` (1/2/null) já foram **aprovados**, mas o esquema completo ainda não.
-- **Criação e compartilhamento do `partidaId`** entre jogadores, sem alterar o JSON RMI do professor por conta própria.
-- Perspectiva de `Resultado` (`vit`/`der`), detalhes do empate/erro no evento `fim`, significado de quem inicia como X/O (foi **proposto**, não confirmado como requisito definitivo). A existência de `fim`/`confirmacao_fim` e `vencedor` 1/2/null **já está aprovada**.
-- Se `Tabuleiro` descreve o estado **antes ou depois** da jogada e como detectar inconsistências.
-- Enquadramento das mensagens TCP e extensão equivalente para UDP (JSON por linha foi **recomendado**, ainda não aprovado como regra final).
-- As políticas de match (erros, timeout, duplicidade, desistência por timeout e ausência de retries automáticos) já foram aprovadas na seção 3.1; não reabrir essas decisões como pendências. A porta remota nas VMs e as validações ainda faltantes continuam em aberto.
-- Se uma rejeição de jogada reinicia o prazo de 120 segundos (a proposta anterior era **não reiniciar**, sem aceite explícito).
-- Número da porta de cada jogador, configuração de `java.rmi.server.hostname`, TTL/interface multicast e limitações das VMs.
+As decisões de partida TCP anteriormente listadas foram aprovadas expressamente e estão registradas abaixo. Permanecem pendentes portas definitivas nas VMs, configuração de interface/TTL multicast e limitações da rede remota. Não implementar UDP nem reabrir decisões aprovadas sem motivo.
 
-Não implementar essas decisões pendentes silenciosamente.
+### Protocolo TCP aprovado e implementado em 25/10/2026
+
+O responsável confirmou expressamente a proposta TCP nesta conversa. São escolhas do projeto, complementares ao PDF:
+
+- Ambos reservam PLAYER_IP:PLAYER_PORT antes de chamar RMI. Quem recebe inicia=true conecta e usa X; o outro aceita e usa O. Aceite/conexão limitados a 120 s, sem reconexão automática. O IP da conexão aceita deve coincidir com o adversário retornado pelo match.
+- UTF-8, um objeto JSON por linha, no máximo 16384 unidades UTF-16 por mensagem. Codificação inválida, JSON ilegível ou mensagem excessiva encerram por erro; jogada legível com dados inválidos recebe rejeição e pode ser corrigida. A leitura usa um prazo absoluto, inclusive durante mensagens incompletas.
+- O iniciador gera um UUID e envia `{"evento":"inicio","partidaId":"UUID"}` antes da primeira jogada. O JSON RMI permanece inalterado.
+- Jogadas usam exatamente Numero, Jogada, Tabuleiro, Resultado. Numero é o índice global antes de aplicar a jogada; Tabuleiro é posterior à jogada; Resultado é do emissor. Esta implementação envia jog, vit ou emp; der permanece reservado no vocabulário do professor, mas não representa uma jogada válida própria neste fluxo.
+- Rejeição: `{"evento":"rejeicao","partidaId":"UUID","motivo":"texto","refazer":true}`. Tabuleiro e contador preservados; prazo original de 120 s não reinicia. O emissor mantém uma cópia anterior para desfazer a tentativa rejeitada; a próxima jogada válida confirma implicitamente a sua jogada anterior.
+- Quem recebe uma jogada conclusiva valida e envia `{"evento":"fim","partidaId":"UUID","status":"vitoria","vencedor":1}`; status empate usa vencedor null. Autor da jogada valida e responde `{"evento":"confirmacao_fim","partidaId":"UUID"}`. Vitória usa vencedor 1/2. Cada espera de confirmação tem limite de 120 s.
+- Falha/inatividade: fim com status erro/inatividade, vencedor null e motivo, enviado quando possível; encerrar localmente com saída 1. Não há confirmação obrigatória para erro de rede nem garantia de entrega. Resultado normal confirmado termina com saída 0. EOF do terminal encerra por erro. Uma thread daemon simples lê a entrada enquanto a sessão observa a rede, permitindo detectar desconexão ou fim remoto durante a escolha humana.
+- Regras locais em TicTacToeRules; protocolo/validação em GameMessages; troca TCP/terminal em TcpGameSession; Player configura, busca match e abre conexão. Display/multicast continuam pendentes.
 
 ## 6. Regras de engenharia e falhas
 
@@ -132,15 +136,12 @@ Não implementar essas decisões pendentes silenciosamente.
 
 ## 8. Estado atual e próxima ação
 
-- Por pedido posterior do responsável, regras locais em `code/TicTacToeRules.java`: tabuleiro privado, cópia para consulta, validação de casa/símbolo/alternância, contador de jogadas aceitas, vitória e empate. A classe aceita qualquer símbolo na primeira jogada; a associação entre iniciador e X/O continua pendente na sessão. `getWinner()` retorna 0 sem vencedor local; isso não altera o contrato JSON final com vencedor null. Não contém rede, JSON nem entrada de terminal. Integração no Player e protocolo TCP permanecem pendentes; o pedido de classe separada não aprovou silenciosamente a proposta anterior de protocolo.
+- Decisão mais recente do responsável: manter TcpGameSession no arquivo separado code/TcpGameSession.java. Esta decisão substitui a reorganização anterior como classe interna. Regras permanecem em TicTacToeRules.java.
 
-- Fontes diretamente em `code/`: `MatchServer`, `Player`, `Display`, `MatchService`, `JsonMessages`, `JsonUtil` e `TicTacToeRules`. Lógica em `MatchServer.getOponent`; Player só busca oponente por RMI e Display apenas informa que multicast não foi implementado. `Main.java` foi substituído por essas entradas a pedido do responsável.
-- Mantidos os parâmetros e decisões deste repositório, inclusive 300 s de timeout de match e testes manuais.
-- `JsonUtil.java` substitui `org.json`; não há dependências externas nem pasta `lib/`.
-- Filas por protocolo, ordem de registro, duplicidade, erros de aplicação e limpeza por timeout são políticas aprovadas na seção 3.1. Espera com `wait`/`notifyAll`; sem retries automáticos ou cancelamento remoto imediato.
-- Roteiros de teste manual em `TESTES_MANUAIS.md`; resultados atuais na seção 9 e quadro consolidado na seção 7 de `PLANO_DO_PROJETO.md`. A seção 10 é histórico org.json; resultados do protótipo Gson não comprovam esta versão. Na assinatura String, passaram compilação, par local, duplicidade, IP inválido e timeout reduzido de 10 s. Prazo real de 300 s, protocolos separados e desistência têm evidência histórica com byte[]; não reexecutados com String. Pareamento nas VMs foi relatado pelo responsável antes desta mudança; repetir após atualizar/recompilar todos os componentes.
-- Próxima ação: concluir a validação manual do contrato aprovado de match e preparar validação nas VMs com porta remota definida; não avançar para jogo/display nem criar testes automatizados.
-
+- Nove fontes diretamente em code: MatchServer, MatchService, Player, Display, JsonMessages, JsonUtil, TicTacToeRules, GameMessages e TcpGameSession. Somente JDK 17; RMI usa String; nenhuma biblioteca externa.
+- Match preservado. Player agora joga uma partida TCP após RMI; não aceita protocolo UDP. Regras separadas, sem JSON/rede na classe TicTacToeRules. Display ainda é entrada reservada.
+- Verificações manuais localhost: vitória X, vitória O e empate com resultado nos dois terminais; entrada inválida, casa ocupada/fora do intervalo; rejeição remota com rollback e repetição de Numero; sequência/tabuleiro divergentes rejeitados e correção aceita; desconexão durante entrada humana; prazo real de 120 s com encerramento dos dois jogadores. Compilação passou com avisos unchecked esperados.
+- Testes atuais e históricos distinguidos no plano; VMs e multicast não foram testados nesta implementação. Próximo passo: repetir a partida TCP nas VMs; depois implementar publicação/recepção multicast em etapa própria. Não declarar o trabalho completo sem multicast.
 
 ## 9. Estilo do responsável e nível de Java
 
@@ -160,7 +161,7 @@ Ao explicar código, partir desses fundamentos. Explicar recursos de rede, sincr
 - Usar nomes descritivos para classes, métodos, parâmetros e variáveis; classes em PascalCase, métodos e variáveis em camelCase. Preferir nomes que indiquem a ação ou o papel no domínio, evitando abreviações como `b`, `opt` ou `arq` quando escondem o significado. Não renomear campos JSON, métodos RMI ou outros contratos externos por preferência de estilo.
 - Usar métodos auxiliares simples para rotinas identificáveis, como leitura, validação, apresentação e operações do domínio. Métodos `private static` são adequados a rotinas que não dependam do estado de uma instância; não transformar todo o projeto em métodos estáticos.
 - Para entrada textual no terminal, preferir o padrão familiar `BufferedReader` com `InputStreamReader` quando houver necessidade de leitura interativa. Não adicionar menus ou interação a módulos que não precisem disso.
-- Escrever comentários curtos e mensagens de terminal em português, explicando a intenção de cada bloco quando isso ajudar a leitura. Não comentar mecanicamente cada linha nem impor uma renomeação em massa dos identificadores existentes, que já misturam idiomas.
+- Por pedido posterior do responsável, manter os fontes Java sem comentários, incluindo Javadoc. Explicações ficam na documentação e na conversa. Manter mensagens de terminal em português; não impor renomeação em massa dos identificadores existentes, que já misturam idiomas.
 - Preservar nomes compreensíveis e organização consistente; o recuo irregular do exemplo não é um padrão a reproduzir. Usar o recuo já consistente no projeto.
 - **Permitir `final` somente para constantes nomeadas**, com nomes em MAIUSCULAS_COM_SUBLINHADOS; por exemplo, `final int SAIR = 0;`. Não usar `final` em classes, métodos, parâmetros ou variáveis comuns. Esta exceção substitui a proibição total anterior; ela não exige adicionar constantes a toda operação.
 

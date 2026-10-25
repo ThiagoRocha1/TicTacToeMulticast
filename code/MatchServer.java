@@ -51,7 +51,6 @@ public class MatchServer implements MatchService {
         PendingMatchRequest currentRequest = new PendingMatchRequest(requestingPlayer, matchTimeoutNanoseconds);
         ArrayDeque protocolRequests = (ArrayDeque) requestsByProtocol.get(requestingPlayer.getProtocol());
         synchronized (matchmakingMonitor) {
-            // Toda consulta e alteração da fila ocorre sob o mesmo monitor.
             Iterator requestIterator = protocolRequests.iterator();
             while (requestIterator.hasNext()) {
                 PendingMatchRequest pendingRequest = (PendingMatchRequest) requestIterator.next();
@@ -75,7 +74,6 @@ public class MatchServer implements MatchService {
                 currentRequest.responseJson = JsonMessages.createOpponentResponse(opponentRequest.player, false);
                 matchmakingMonitor.notifyAll();
             }
-            // wait libera o monitor enquanto esta chamada aguarda um adversário.
             while (currentRequest.responseJson == null) {
                 long remainingNanoseconds = currentRequest.expirationNanoseconds - System.nanoTime();
                 if (remainingNanoseconds <= 0) {
@@ -131,7 +129,6 @@ public class MatchServer implements MatchService {
         MatchService remoteService = (MatchService) UnicastRemoteObject.exportObject(matchServer, remoteObjectPort);
         Registry matchRegistry;
 
-        // Se a criação ou o registro falhar, o objeto já exportado precisa ser liberado.
         try {
             matchRegistry = LocateRegistry.createRegistry(registryPort);
         } catch (RemoteException registryFailure) {
@@ -149,7 +146,6 @@ public class MatchServer implements MatchService {
         Runtime.getRuntime().addShutdownHook(new Thread(new ServerShutdown(matchRegistry, matchServer)));
         System.out.printf("Registry %s:%d, serviço %s, objeto remoto na porta %d%n",
                 serverHost, registryPort, serviceName, remoteObjectPort);
-        // Mantém o servidor ativo até o encerramento do processo.
         new CountDownLatch(1).await();
     }
 
@@ -173,7 +169,6 @@ public class MatchServer implements MatchService {
         try {
             UnicastRemoteObject.unexportObject(remoteObject, true);
         } catch (NoSuchObjectException alreadyClosedResource) {
-            // O recurso já foi liberado; o encerramento pode continuar.
             System.err.println("Recurso RMI já encerrado: " + resourceName);
         }
     }
@@ -212,7 +207,6 @@ public class MatchServer implements MatchService {
         } catch (NumberFormatException invalidTimeout) {
             throw new IllegalArgumentException("MATCH_TIMEOUT_SECONDS deve conter um inteiro positivo", invalidTimeout);
         }
-        // O prazo é convertido para nanossegundos pelo servidor, sem ultrapassar long.
         if (timeoutSeconds <= 0 || timeoutSeconds > Long.MAX_VALUE / 1000000000L) {
             throw new IllegalArgumentException("MATCH_TIMEOUT_SECONDS fora do intervalo permitido");
         }

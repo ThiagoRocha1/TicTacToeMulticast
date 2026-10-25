@@ -2,7 +2,7 @@
 
 Projeto acadêmico de **Sistemas Distribuídos**: jogo da velha distribuído para dois jogadores, com pareamento por **Java RMI**, comunicação direta por **sockets TCP** (e, em uma fase posterior, UDP) e publicação das jogadas para um ou mais **displays multicast**.
 
-> **Estado atual (25/10/2026):** base do servidor de match importada para este workspace por pedido do responsável, com pareamento em `MatchServer.getOponent`. Mantidas as decisões anteriores desta pasta: utilitário JSON próprio, timeout de match de **300 s**, prazo de partida de **120 s**, compilação direta e testes manuais. As políticas de match foram aprovadas posteriormente pelo responsável; decisões de protocolo da partida e configuração nas VMs permanecem pendentes.
+> **Estado atual (25/10/2026):** base do servidor de match importada para este workspace por pedido do responsável, com pareamento em `MatchServer.getOponent`. Mantidas as decisões anteriores desta pasta: utilitário JSON próprio, timeout de match de **300 s**, prazo de partida de **120 s**, compilação direta e testes manuais. As políticas de match foram aprovadas posteriormente pelo responsável; partida TCP aprovada e implementada posteriormente. Multicast e validação da partida nas VMs permanecem pendentes.
 
 ## Documentação para pessoas e agentes
 
@@ -87,45 +87,13 @@ Exemplo de erro (texto ilustrativo; os tipos e nomes dos campos são o contrato)
 
 **Decisão atual do responsável (25/10/2026):** substituir `org.json` por `JsonUtil`, implementado com o JDK. Não há JAR para baixar nem pasta `lib/`. `JsonUtil.parseJson` lê objetos como `Map`, arrays como `List`, números como `BigDecimal`, além de strings, booleanos e `null`; `toJson` faz a conversão inversa. Chaves duplicadas, JSON malformado e aninhamento acima de 32 níveis são rejeitados. `JsonMessages` limita a entrada a 16384 unidades de `String.length()` (UTF-16) e valida os campos do match. O limite passou de bytes para comprimento de String ao remover a conversão manual. A decisão anterior de usar a biblioteca foi substituída por este pedido.
 
-No RMI, o JSON é passado como `String` e o próprio RMI cuida do transporte. A codificação e delimitação dos futuros sockets não são definidas por essa assinatura. O contrato de enquadramento das mensagens nos sockets (por exemplo, JSON por linha no TCP) **ainda precisa ser consolidado** antes de implementar.
+No RMI, o JSON é passado como `String` e o próprio RMI cuida do transporte. A codificação e delimitação dos futuros sockets não são definidas por essa assinatura. O TCP agora usa UTF-8 com um JSON por linha, conforme aprovação posterior descrita abaixo.
 
 ### 3. Mensagens de jogada e controle
 
-O JSON **de jogada** preserva os nomes e os valores previstos no PDF:
+Campos do professor preservados: Numero, Jogada, Tabuleiro e Resultado. O protocolo TCP aprovado posteriormente está detalhado na seção “Protocolo TCP aprovado e implementado” abaixo. Tabuleiro posterior à jogada, resultado do emissor, iniciador X, UUID inicial e controles separados foram confirmados pelo responsável.
 
-```json
-{"Numero":0,"Jogada":4,"Tabuleiro":[0,0,0,0,1,0,0,0,0],"Resultado":"jog"}
-```
-
-- `Numero`: contador **global da sessão** de `0` a `8`, avançando somente para jogadas válidas aceitas.
-- `Jogada`: índice da casa `0..8`.
-- `Tabuleiro`: vetor de **nove inteiros**; `0` = vazia, `1` = X, `2` = O.
-- `Resultado`: valores do professor: `jog`, `vit`, `der`, `emp`.
-- **Ainda pendente:** determinar definitivamente se o tabuleiro transportado é o estado anterior ou posterior à jogada e a perspectiva de `vit` / `der`.
-
-**Escolha do responsável:** utilizar **mensagens JSON separadas de controle** para rejeição de jogadas inválidas, pedido de correção e término da partida. A jogada rejeitada deve produzir uma explicação ao seu autor e pedido de refazimento, sem avançar o número global. O formato exato da mensagem de controle não foi congelado; exemplos apresentados na conversa são **propostas**, não o contrato final.
-
-O encerramento deve informar **a ambos os jogadores** o status da partida e o vencedor, se houver. Em falha de conexão, pode ser impossível entregar a mensagem remota; registrar o erro e informar o participante local.
-
-**Novas decisões aprovadas em 24/10/2026:**
-
-- Cada partida terá um **`partidaId` único**, usado nas **mensagens de controle** para identificar a sessão. Seu formato e o procedimento de criação/troca entre jogadores ainda serão detalhados; **não acrescentar o campo à resposta RMI** sem nova aprovação.
-- O encerramento normal terá os eventos de controle **`fim`** e **`confirmacao_fim`**: após validar a jogada conclusiva, o adversário comunica o resultado por `fim`, e quem fez a jogada confirma por `confirmacao_fim`.
-- O campo **`vencedor`** terá valor **`1`** (X), **`2`** (O) ou **`null`** (sem vencedor). Seu uso em mensagens `fim` está aprovado. Os demais nomes de campos e os formatos completos de controle ainda não foram congelados.
-
-**Exemplos apenas ilustrativos** do protocolo acordado (não equivalem ao esquema JSON definitivo):
-
-```json
-{"tipo":"controle","evento":"fim","partidaId":"a7f3c92b","resultado":"vitoria","vencedor":1}
-```
-
-```json
-{"tipo":"controle","evento":"confirmacao_fim","partidaId":"a7f3c92b"}
-```
-
-Em empate ou erro, não há vencedor automático (`vencedor: null`). A confirmação pode não ser entregue se a conexão cair; cada jogador deverá tratar essa falha localmente.
-
-> **Diferença a documentar:** o PDF sugere devolver **a mesma mensagem** em caso de jogada inválida; a decisão atual prevê **mensagem de controle separada, explicativa**. A equivalência/compatibilidade com a intenção do professor deve ser verificada quando o protocolo for consolidado.
+**Diferença em relação ao PDF:** o exemplo do professor sugere devolver a mesma mensagem quando inválida. O responsável escolheu controle separado com motivo e refazer. Esta escolha está documentada, mas não constitui confirmação de aprovação do professor.
 
 ### 4. Timeout, falhas e displays
 
@@ -141,7 +109,7 @@ O responsável definiu que a interoperabilidade será verificada **entre os comp
 
 ## Restrições de trabalho e avaliação
 
-- A base do servidor de match foi solicitada nesta conversa. Isso não autoriza antecipar os demais módulos ou fechar as pendências de protocolo sem consolidação.
+- O responsável aprovou o match e posteriormente a integração TCP descrita abaixo. Multicast e UDP exigem etapas próprias.
 - Preferir a solução mais simples e direta, sem frameworks e sem abstrações desnecessárias.
 - Testes **exclusivamente manuais** executando servidor, jogadores e displays em terminais. Sem JUnit/Mockito ou testes automatizados.
 - Para cada falha prevista, registrar **o que pode falhar**, **a reação esperada** e **como reproduzir/testar manualmente**.
@@ -155,7 +123,7 @@ O responsável definiu que a interoperabilidade será verificada **entre os comp
 | --- | --- |
 | Item 1 — entendimento, decisões e dúvidas | **Em consolidação; decisões atualizadas** |
 | Item 2 — funcionamento explicado ponta a ponta | **Aguardando confirmação explícita** |
-| Arquitetura detalhada e classes | **Não iniciado** |
+| Arquitetura e classes | Match, regras e sessão TCP separados; multicast pendente |
 | Java do match | **Base implementada; políticas de match aprovadas, validação em andamento** |
 | Integração e testes | Resultados atuais na seção 9 e quadro da seção 7 de `PLANO_DO_PROJETO.md`; comandos em `TESTES_MANUAIS.md` |
 | `PLANO_DO_PROJETO.md` | **Registro de acompanhamento criado antecipadamente a pedido do responsável; isso não inicia o item 6** |
@@ -164,7 +132,7 @@ Leia [`PLANO_DO_PROJETO.md`](PLANO_DO_PROJETO.md) para pendências e **BLOCO DE 
 
 ## Base Java importada em 25/10/2026
 
-Os programas possuem entradas separadas: `MatchServer.java` executa o servidor e mantém a lógica em `MatchServer.getOponent`; `Player.java` executa a busca por RMI e mostra a resposta; `Display.java` é uma entrada reservada que informa que a recepção multicast ainda não foi implementada. `MatchService` é a interface remota; `JsonMessages` interpreta e valida as strings JSON via `JsonUtil`. O registro transportado é representado por `JsonMessages.PlayerRegistration`, distinto do programa Player. A antiga classe `Main` foi removida. `PendingMatchRequest` guarda jogador, prazo e resposta; a espera usa `wait`/`notifyAll`, sob um único monitor. Não são usadas lambdas, futures de arrays nem notação de generics; `final` é permitido somente para constantes nomeadas, conforme a seção 9 de `AGENTS.md`. As coleções usam casts explícitos; por isso o compilador pode informar operações unchecked.
+Os programas possuem entradas separadas: `MatchServer.java` executa o servidor e mantém a lógica em `MatchServer.getOponent`; `Player.java` executa a busca RMI e inicia a partida TCP pela classe `TcpGameSession` em arquivo separado, com mensagens validadas por `GameMessages` e regras em `TicTacToeRules`; `Display.java` é uma entrada reservada que informa que a recepção multicast ainda não foi implementada. `MatchService` é a interface remota; `JsonMessages` interpreta e valida as strings JSON via `JsonUtil`. O registro transportado é representado por `JsonMessages.PlayerRegistration`, distinto do programa Player. A antiga classe `Main` foi removida. `PendingMatchRequest` guarda jogador, prazo e resposta; a espera usa `wait`/`notifyAll`, sob um único monitor. Não são usadas lambdas, futures de arrays nem notação de generics; `final` é permitido somente para constantes nomeadas, conforme a seção 9 de `AGENTS.md`. As coleções usam casts explícitos; por isso o compilador pode informar operações unchecked.
 
 A compilação e a execução exigem somente o JDK 17. Os comandos usam `/tmp/tictactoe-classes` para manter apenas fontes em `code/`; após reiniciar a máquina ou limpar `/tmp`, recompilar. As rotinas de servidor, cliente e JSON foram separadas em métodos simples, com constantes nomeadas e erros de configuração explícitos em português.
 
@@ -194,7 +162,7 @@ No terminal 3, repetir o cliente com `PLAYER_PORT=5011`. Ambos recebem o endpoin
 
 As políticas de fila, ordem de início, duplicidade e erros foram aprovadas pelo responsável em 25/10/2026 conforme o contrato acima. A implementação usa `wait`/`notifyAll`. Cancelamento imediato e novas tentativas automáticas não fazem parte desta versão; o pedido de cliente encerrado pode permanecer elegível para pareamento até expirar.
 
-`MATCH_TIMEOUT_SECONDS` tem padrão **300**, conforme a decisão anterior desta pasta. Testes podem reduzir esse parâmetro temporariamente. IP/portas são configuráveis; os padrões de VM permanecem `.14`, Registry `9821` e serviço `MatchService21`. A porta definitiva do objeto remoto nas VMs está pendente (`RMI_OBJECT_PORT` é obrigatório). Os valores locais `1099`/`5021` são exemplos. O prazo de 120 s durante a partida não é implementado por esta base do match.
+`MATCH_TIMEOUT_SECONDS` tem padrão **300**, conforme a decisão anterior desta pasta. Testes podem reduzir esse parâmetro temporariamente. IP/portas são configuráveis; os padrões de VM permanecem `.14`, Registry `9821` e serviço `MatchService21`. A porta definitiva do objeto remoto nas VMs está pendente (`RMI_OBJECT_PORT` é obrigatório). Os valores locais `1099`/`5021` são exemplos. O prazo de 120 s da partida é aplicado separadamente por TcpGameSession.
 
 Os roteiros completos, incluindo teste com outro IP e portas, estão em `TESTES_MANUAIS.md`. Não foram importados Maven, Gradle, Gson, JUnit ou scripts de testes automatizados.
 
@@ -205,13 +173,36 @@ Entrada reservada ao display:
 java -cp /tmp/tictactoe-classes Display
 ```
 
-No estado atual, mostra `Display multicast ainda não implementado.` e encerra; não abre socket. A implementação do tabuleiro, partida e recepção multicast continua pendente.
+No estado atual, mostra `Display multicast ainda não implementado.` e encerra; não abre socket. Tabuleiro e partida TCP estão implementados; publicação e recepção multicast continuam pendentes.
 
 
 Ao atualizar uma VM da antiga assinatura byte[] para String, encerrar os processos Java antigos, atualizar os fontes correspondentes (incluindo `MatchService.java`), recompilar e reiniciar primeiro MatchServer e depois os Players. A interface compartilhada deve ter a mesma versão em todas as VMs. O nome do serviço e as variáveis de ambiente continuam iguais.
 
 ## Regras locais do jogo
 
-`code/TicTacToeRules.java` concentra as regras, separadas de `Player`: `placeMove(casa, simbolo)` valida e aplica uma jogada; `getBoardCopy()` fornece uma cópia; `getAcceptedMoveCount()` informa quantas jogadas foram aceitas; `getWinner()`, `isDraw()` e `isGameOver()` consultam o resultado. Valores: 0 vazio/sem vencedor local, 1 X, 2 O. A primeira jogada aceita o símbolo informado pela sessão; as seguintes exigem alternância. Jogadas rejeitadas não alteram estado. A classe não define quem inicia, o JSON da partida ou o transporte TCP e ainda não está integrada ao Player. O zero retornado por getWinner não substitui o null já aprovado no JSON de encerramento.
+`code/TicTacToeRules.java` concentra as regras, separadas de `Player`: `placeMove(casa, simbolo)` valida e aplica uma jogada; `getBoardCopy()` fornece uma cópia; `getAcceptedMoveCount()` informa quantas jogadas foram aceitas; `getWinner()`, `isDraw()` e `isGameOver()` consultam o resultado. Valores: 0 vazio/sem vencedor local, 1 X, 2 O. A primeira jogada aceita o símbolo informado pela sessão; as seguintes exigem alternância. Jogadas rejeitadas não alteram estado. A classe não define quem inicia, o JSON da partida ou o transporte TCP e é utilizada pelo Player por meio de TcpGameSession. O zero retornado por getWinner não substitui o null já aprovado no JSON de encerramento.
 
 Compilação e verificação manual: caso 13 de `TESTES_MANUAIS.md`.
+
+### Protocolo TCP aprovado e implementado em 25/10/2026
+
+O responsável confirmou expressamente a proposta TCP nesta conversa. São escolhas do projeto, complementares ao PDF:
+
+- Ambos reservam PLAYER_IP:PLAYER_PORT antes de chamar RMI. Quem recebe inicia=true conecta e usa X; o outro aceita e usa O. Aceite/conexão limitados a 120 s, sem reconexão automática. O IP da conexão aceita deve coincidir com o adversário retornado pelo match.
+- UTF-8, um objeto JSON por linha, no máximo 16384 unidades UTF-16 por mensagem. Codificação inválida, JSON ilegível ou mensagem excessiva encerram por erro; jogada legível com dados inválidos recebe rejeição e pode ser corrigida. A leitura usa um prazo absoluto, inclusive durante mensagens incompletas.
+- O iniciador gera um UUID e envia `{"evento":"inicio","partidaId":"UUID"}` antes da primeira jogada. O JSON RMI permanece inalterado.
+- Jogadas usam exatamente Numero, Jogada, Tabuleiro, Resultado. Numero é o índice global antes de aplicar a jogada; Tabuleiro é posterior à jogada; Resultado é do emissor. Esta implementação envia jog, vit ou emp; der permanece reservado no vocabulário do professor, mas não representa uma jogada válida própria neste fluxo.
+- Rejeição: `{"evento":"rejeicao","partidaId":"UUID","motivo":"texto","refazer":true}`. Tabuleiro e contador preservados; prazo original de 120 s não reinicia. O emissor mantém uma cópia anterior para desfazer a tentativa rejeitada; a próxima jogada válida confirma implicitamente a sua jogada anterior.
+- Quem recebe uma jogada conclusiva valida e envia `{"evento":"fim","partidaId":"UUID","status":"vitoria","vencedor":1}`; status empate usa vencedor null. Autor da jogada valida e responde `{"evento":"confirmacao_fim","partidaId":"UUID"}`. Vitória usa vencedor 1/2. Cada espera de confirmação tem limite de 120 s.
+- Falha/inatividade: fim com status erro/inatividade, vencedor null e motivo, enviado quando possível; encerrar localmente com saída 1. Não há confirmação obrigatória para erro de rede nem garantia de entrega. Resultado normal confirmado termina com saída 0. EOF do terminal encerra por erro. Uma thread daemon simples lê a entrada enquanto a sessão observa a rede, permitindo detectar desconexão ou fim remoto durante a escolha humana.
+- Regras locais em TicTacToeRules; protocolo/validação em GameMessages; troca TCP/terminal em TcpGameSession; Player configura, busca match e abre conexão. Display/multicast continuam pendentes.
+
+## Arquivos para executar a versão TCP nas VMs
+
+Na pasta única ~/tictactoe da VM .14: MatchServer.java, MatchService.java, JsonMessages.java, JsonUtil.java e a configuração .env do servidor.
+
+Na pasta ~/tictactoe de cada VM jogadora (.16 e .17): Player.java, MatchService.java, JsonMessages.java, JsonUtil.java, TicTacToeRules.java, GameMessages.java, TcpGameSession.java e a configuração .env daquele jogador. Display.java pode permanecer junto ao jogador, mas ainda não recebe multicast.
+
+Recompilar com `javac -encoding UTF-8 *.java` em cada máquina. Iniciar `java -cp . MatchServer` na .14 e depois `java -cp . Player` na .16 e .17. PLAYER_IP deve ser local à própria VM e PLAYER_PORT deve estar disponível/acessível ao adversário. Roteiro completo e resultados esperados no caso 14 de TESTES_MANUAIS.md. Não executar processos antigos com arquivos novos.
+
+Por decisão mais recente do responsável, TcpGameSession permanece em code/TcpGameSession.java, separado de Player.java. Distribuir ambos aos jogadores e compilar juntos com os demais fontes; executar Player normalmente.
