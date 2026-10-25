@@ -132,7 +132,9 @@ Não implementar essas decisões pendentes silenciosamente.
 
 ## 8. Estado atual e próxima ação
 
-- Fontes diretamente em `code/`: `MatchServer`, `Player`, `Display`, `MatchService`, `JsonMessages` e `JsonUtil`. Lógica em `MatchServer.getOponent`; Player só busca oponente por RMI e Display apenas informa que multicast não foi implementado. `Main.java` foi substituído por essas entradas a pedido do responsável.
+- Por pedido posterior do responsável, regras locais em `code/TicTacToeRules.java`: tabuleiro privado, cópia para consulta, validação de casa/símbolo/alternância, contador de jogadas aceitas, vitória e empate. A classe aceita qualquer símbolo na primeira jogada; a associação entre iniciador e X/O continua pendente na sessão. `getWinner()` retorna 0 sem vencedor local; isso não altera o contrato JSON final com vencedor null. Não contém rede, JSON nem entrada de terminal. Integração no Player e protocolo TCP permanecem pendentes; o pedido de classe separada não aprovou silenciosamente a proposta anterior de protocolo.
+
+- Fontes diretamente em `code/`: `MatchServer`, `Player`, `Display`, `MatchService`, `JsonMessages`, `JsonUtil` e `TicTacToeRules`. Lógica em `MatchServer.getOponent`; Player só busca oponente por RMI e Display apenas informa que multicast não foi implementado. `Main.java` foi substituído por essas entradas a pedido do responsável.
 - Mantidos os parâmetros e decisões deste repositório, inclusive 300 s de timeout de match e testes manuais.
 - `JsonUtil.java` substitui `org.json`; não há dependências externas nem pasta `lib/`.
 - Filas por protocolo, ordem de registro, duplicidade, erros de aplicação e limpeza por timeout são políticas aprovadas na seção 3.1. Espera com `wait`/`notifyAll`; sem retries automáticos ou cancelamento remoto imediato.

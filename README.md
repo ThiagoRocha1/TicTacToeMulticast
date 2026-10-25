@@ -209,3 +209,9 @@ No estado atual, mostra `Display multicast ainda não implementado.` e encerra; 
 
 
 Ao atualizar uma VM da antiga assinatura byte[] para String, encerrar os processos Java antigos, atualizar os fontes correspondentes (incluindo `MatchService.java`), recompilar e reiniciar primeiro MatchServer e depois os Players. A interface compartilhada deve ter a mesma versão em todas as VMs. O nome do serviço e as variáveis de ambiente continuam iguais.
+
+## Regras locais do jogo
+
+`code/TicTacToeRules.java` concentra as regras, separadas de `Player`: `placeMove(casa, simbolo)` valida e aplica uma jogada; `getBoardCopy()` fornece uma cópia; `getAcceptedMoveCount()` informa quantas jogadas foram aceitas; `getWinner()`, `isDraw()` e `isGameOver()` consultam o resultado. Valores: 0 vazio/sem vencedor local, 1 X, 2 O. A primeira jogada aceita o símbolo informado pela sessão; as seguintes exigem alternância. Jogadas rejeitadas não alteram estado. A classe não define quem inicia, o JSON da partida ou o transporte TCP e ainda não está integrada ao Player. O zero retornado por getWinner não substitui o null já aprovado no JSON de encerramento.
+
+Compilação e verificação manual: caso 13 de `TESTES_MANUAIS.md`.

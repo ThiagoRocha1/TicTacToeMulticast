@@ -299,3 +299,65 @@ readResponse.invoke(null, " ".repeat(16385))
 Esperado: InvocationTargetException com causa IllegalArgumentException, indicando JSON ausente ou maior que 16384 caracteres. String.length conta unidades UTF-16; isso é um limite local de entrada e não define a codificação do transporte RMI.
 
 Sinais de falha: método remoto não reconhecido ou incompatibilidade de interface, campos inválidos aceitos ou apenas um jogador retornando. Para investigar mistura de versões, verificar todos os fontes/compilados, parar processos antigos, recompilar e reiniciar; não copiar uma interface antiga para testar em serviço compartilhado. Encerrar o servidor de teste com Ctrl+C após observar os resultados.
+# Caso 13 — regras locais separadas (sem rede)
+
+Objetivo: verificar o tabuleiro e as rejeições sem executar RMI ou TCP. Pré-requisitos: JDK 17 com javac e jshell; terminal na raiz do projeto. Nenhum servidor é necessário.
+
+1. Compilar sem gerar arquivos no repositório:
+
+```bash
+mkdir -p /tmp/tictactoe-rules
+javac -encoding UTF-8 -d /tmp/tictactoe-rules code/*.java
+jshell --execution local
+```
+
+2. No JShell, carregar a classe e provocar falhas:
+
+```java
+/open code/TicTacToeRules.java
+TicTacToeRules rules = new TicTacToeRules();
+rules.getAcceptedMoveCount()
+rules.isGameOver()
+rules.placeMove(-1, 1)
+rules.placeMove(9, 1)
+rules.placeMove(0, 0)
+rules.placeMove(0, 1)
+rules.placeMove(0, 2)
+rules.placeMove(1, 1)
+rules.getAcceptedMoveCount()
+int[] copy = rules.getBoardCopy();
+copy[0] = 2;
+rules.getBoardCopy()[0]
+```
+
+Esperado no único terminal: inicialmente 0 e false; exceções explicativas para -1, 9, símbolo 0, casa ocupada e repetição de símbolo. Contador continua 1; a alteração da cópia não muda a casa original, que continua 1.
+
+3. Completar uma vitória de X:
+
+```java
+rules.placeMove(3, 2)
+rules.placeMove(1, 1)
+rules.placeMove(4, 2)
+rules.placeMove(2, 1)
+rules.getWinner()
+rules.isGameOver()
+rules.isDraw()
+rules.getAcceptedMoveCount()
+rules.placeMove(8, 2)
+```
+
+Esperado: 1, true, false, 5 e rejeição de jogada após encerramento. Repetir com novas instâncias para as linhas 3/4/5, 6/7/8, 0/3/6, 1/4/7, 2/5/8, 0/4/8 e 2/4/6, alternando com duas casas fora da linha. Repetir com símbolo 2 vencedor; a sessão ainda não determina quem será X/O.
+
+4. Verificar empate:
+
+```java
+TicTacToeRules draw = new TicTacToeRules();
+int[] positions = {0,1,2,4,3,5,7,6,8};
+for (int index = 0; index < positions.length; index++) { draw.placeMove(positions[index], index % 2 + 1); }
+draw.isDraw()
+draw.getWinner()
+draw.getAcceptedMoveCount()
+/exit
+```
+
+Esperado: true, 0 e 9. Sinais de falha: rejeição altera estado/contador, cópia altera original, vitória não identificada, empate com vencedor, ou jogada aceita após encerramento. A verificação local não comprova rede nem os JSONs da partida.
