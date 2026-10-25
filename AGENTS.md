@@ -5,8 +5,9 @@ Estas instruções se aplicam à raiz de `TicTacToeMulticast` e às subpastas, a
 ## 1. Estado atual e autorização vigente
 
 - Em 25/10/2026, nesta conversa, o responsável pediu a implementação do servidor de match, o pareamento dentro de `Main` e o uso do workspace `/home/thiago/Desktop/TicTacToeMulticast`.
+- Posteriormente, o responsável pediu separar os programas: `MatchServer.java`, `Player.java` e `Display.java`. Isso substitui a organização anterior em `Main`: lógica de match em `MatchServer.getOponent`; `Player` contém a busca RMI existente; `Display` é somente uma entrada reservada, com aviso de funcionalidade ainda não implementada. Não antecipar jogo ou multicast nesta reorganização.
 - Em seguida, determinou expressamente usar as decisões já existentes nesta pasta. Elas prevalecem sobre as sugestões do protótipo: **300 s para match**, **120 s durante a partida**, **utilitário JSON próprio (pedido posterior substitui org.json)**, `javac`/`java` e **testes manuais**.
-- A importação do código é autorizada; isso não aprova silenciosamente decisões que este arquivo mantém pendentes. O código importado é uma base para revisão dessas pendências; não representa contrato final de erros/cancelamento/retries/duplicidade.
+- A importação do código foi autorizada. Posteriormente o responsável aprovou as políticas de match da seção 3.1; essas políticas não estão mais pendentes. Continuam abertas as decisões de partida e ambiente indicadas na seção 5.
 - O bloqueio histórico de implementação foi superado para o código de match solicitado nesta conversa. Novos módulos exigem escopo próprio.
 - Não importar Maven, Gson, JUnit ou scripts de testes automatizados. Não alterar as decisões anteriores sem pedido do responsável.
 
@@ -57,6 +58,21 @@ byte[] getOponent(byte[] jsonIn) throws RemoteException;
 
 O servidor só deve efetuar o match de jogadores com o mesmo protocolo; deve retornar aos **dois** participantes, com um `inicia=true` e outro `inicia=false`. Evitar supor que chamadas RMI pendentes podem ser simplesmente descartadas sem tratar os clientes.
 
+### 3.1. Políticas de match aprovadas posteriormente
+
+Estas são decisões do responsável para o sistema, complementares ao enunciado; não atribuir ao professor os códigos de erro ou as políticas abaixo.
+
+- Sucesso: JSON UTF-8 em `byte[]` com `ip` (texto), `porta` (inteiro 1..65535) e `inicia` (booleano). Parear por ordem de registro na fila de cada protocolo; primeiro recebe true, segundo false. Isso não define quem usa X/O na futura partida.
+- Erro de aplicação: JSON com `erro` e `mensagem`, ambos strings. `mensagem` explica a causa em português; o cliente decide pela string `erro`, sem depender do texto da mensagem.
+- Códigos: `INVALID_REQUEST` para entrada inválida (não entra na fila), `DUPLICATE` para registro pendente repetido, `TIMEOUT` para falta de par no prazo e `INTERRUPTED` para interrupção da espera no servidor quando possível retornar ao cliente.
+- Duplicidade: comparar IP numérico normalizado, porta e protocolo de pedidos pendentes. Rejeitar a nova chamada, preservando o pedido original e seu prazo. Um endpoint TCP e um UDP são registros distintos e nunca formam um par entre si.
+- Timeout: prazo padrão de **300 s**, contado a partir do recebimento do pedido válido; remover o pedido ao expirar e retornar TIMEOUT. Um pedido novo após receber TIMEOUT inicia outro prazo. Não prometer entrega se o cliente estiver desconectado.
+- Desistência: encerrar o cliente **não cancela imediatamente** o pedido no servidor. A limpeza ocorre pelo timeout, salvo se houver pareamento antes. Até expirar, o pedido abandonado pode ser pareado com outro jogador; esta limitação foi aceita. Não acrescentar método RMI ou campos de cancelamento.
+- Interrupção da thread de espera no servidor: remover o pedido ainda pendente, restaurar o estado de interrupção e retornar INTERRUPTED quando possível. Fechar o cliente não equivale a interromper essa thread no servidor. Se o par já foi concluído, preservar sua resposta.
+- Nenhuma nova tentativa automática. Após TIMEOUT, o usuário pode iniciar deliberadamente outro pedido. Após falha RMI, o resultado pode ser desconhecido se o pedido já tiver sido enviado; não reenviar automaticamente.
+- Falha de transporte/Registry: tratar localmente por exceção RMI, mostrar contexto e encerrar a tentativa; não inventar um JSON retornado pelo servidor. O cliente de diagnóstico mostra erros de aplicação com código/mensagem e termina com saída 1; sucesso termina com saída 0.
+
+
 ## 4. Requisitos do PDF que precisam ser preservados
 
 Há **três programas**:
@@ -76,7 +92,7 @@ A mensagem de jogada usa **exatamente** `Numero`, `Jogada`, `Tabuleiro`, `Result
 - Perspectiva de `Resultado` (`vit`/`der`), detalhes do empate/erro no evento `fim`, significado de quem inicia como X/O (foi **proposto**, não confirmado como requisito definitivo). A existência de `fim`/`confirmacao_fim` e `vencedor` 1/2/null **já está aprovada**.
 - Se `Tabuleiro` descreve o estado **antes ou depois** da jogada e como detectar inconsistências.
 - Enquadramento das mensagens TCP e extensão equivalente para UDP (JSON por linha foi **recomendado**, ainda não aprovado como regra final).
-- O timeout de **match é 300 s, já aprovado**; ainda pendentes: formato de resposta/erro no timeout RMI, cancelamento/desistência, retries de RMI e registros duplicados.
+- As políticas de match (erros, timeout, duplicidade, desistência por timeout e ausência de retries automáticos) já foram aprovadas na seção 3.1; não reabrir essas decisões como pendências. A porta remota nas VMs e as validações ainda faltantes continuam em aberto.
 - Se uma rejeição de jogada reinicia o prazo de 120 segundos (a proposta anterior era **não reiniciar**, sem aceite explícito).
 - Número da porta de cada jogador, configuração de `java.rmi.server.hostname`, TTL/interface multicast e limitações das VMs.
 
@@ -112,12 +128,12 @@ Não implementar essas decisões pendentes silenciosamente.
 
 ## 8. Estado atual e próxima ação
 
-- Base Java do match disponível em `code/`; lógica diretamente em `Main.getOponent`.
+- Fontes diretamente em `code/`: `MatchServer`, `Player`, `Display`, `MatchService`, `JsonMessages` e `JsonUtil`. Lógica em `MatchServer.getOponent`; Player só busca oponente por RMI e Display apenas informa que multicast não foi implementado. `Main.java` foi substituído por essas entradas a pedido do responsável.
 - Mantidos os parâmetros e decisões deste repositório, inclusive 300 s de timeout de match e testes manuais.
 - `JsonUtil.java` substitui `org.json`; não há dependências externas nem pasta `lib/`.
-- O código traz do protótipo filas por protocolo, espera com `wait`/`notifyAll`, ordem de chegada, rejeição de duplicidade e erros `erro`/`mensagem`. São detalhes da base importada, sujeitos à consolidação das pendências; não são novos requisitos aprovados do projeto.
-- Roteiros de teste manual em `TESTES_MANUAIS.md`; resultados atuais na seção 9 e quadro consolidado na seção 7 de `PLANO_DO_PROJETO.md`. A seção 10 é histórico org.json; resultados do protótipo Gson não comprovam esta versão. O timeout de 2 s foi validado antes das últimas refatorações; o prazo de 300 s não foi testado.
-- Próxima ação: revisar as pendências do match antes de congelar o contrato; não avançar para jogo/display nem criar testes automatizados.
+- Filas por protocolo, ordem de registro, duplicidade, erros de aplicação e limpeza por timeout são políticas aprovadas na seção 3.1. Espera com `wait`/`notifyAll`; sem retries automáticos ou cancelamento remoto imediato.
+- Roteiros de teste manual em `TESTES_MANUAIS.md`; resultados atuais na seção 9 e quadro consolidado na seção 7 de `PLANO_DO_PROJETO.md`. A seção 10 é histórico org.json; resultados do protótipo Gson não comprovam esta versão. O timeout real de 300 s e o novo registro após expiração passaram na etapa do contrato aprovado; 2 s é histórico anterior. Protocolos TCP/UDP separados e a limitação da desistência também foram observados nesta etapa.
+- Próxima ação: concluir a validação manual do contrato aprovado de match e preparar validação nas VMs com porta remota definida; não avançar para jogo/display nem criar testes automatizados.
 
 
 ## 9. Estilo do responsável e nível de Java

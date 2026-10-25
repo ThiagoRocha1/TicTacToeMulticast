@@ -2,7 +2,7 @@
 
 Projeto acadêmico de **Sistemas Distribuídos**: jogo da velha distribuído para dois jogadores, com pareamento por **Java RMI**, comunicação direta por **sockets TCP** (e, em uma fase posterior, UDP) e publicação das jogadas para um ou mais **displays multicast**.
 
-> **Estado atual (25/10/2026):** base do servidor de match importada para este workspace por pedido do responsável, com pareamento em `Main.getOponent`. Mantidas as decisões anteriores desta pasta: utilitário JSON próprio, timeout de match de **300 s**, prazo de partida de **120 s**, compilação direta e testes manuais. As decisões de protocolo ainda pendentes não foram aprovadas pela importação.
+> **Estado atual (25/10/2026):** base do servidor de match importada para este workspace por pedido do responsável, com pareamento em `MatchServer.getOponent`. Mantidas as decisões anteriores desta pasta: utilitário JSON próprio, timeout de match de **300 s**, prazo de partida de **120 s**, compilação direta e testes manuais. As políticas de match foram aprovadas posteriormente pelo responsável; decisões de protocolo da partida e configuração nas VMs permanecem pendentes.
 
 ## Documentação para pessoas e agentes
 
@@ -62,6 +62,27 @@ Nome planejado para a interface: `MatchService` (estendendo `java.rmi.Remote`). 
 
 Endereços e portas dos exemplos são **ilustrativos**. O servidor considerará os protocolos `tcp` e `udp` no pareamento, embora **o jogador UDP seja implementado apenas depois da versão TCP**.
 
+
+### Contrato de match aprovado em 25/10/2026
+
+Estas são decisões do responsável para o sistema, complementares ao enunciado; não atribuir ao professor os códigos de erro ou as políticas abaixo.
+
+- Sucesso: JSON UTF-8 em `byte[]` com `ip` (texto), `porta` (inteiro 1..65535) e `inicia` (booleano). Parear por ordem de registro na fila de cada protocolo; primeiro recebe true, segundo false. Isso não define quem usa X/O na futura partida.
+- Erro de aplicação: JSON com `erro` e `mensagem`, ambos strings. `mensagem` explica a causa em português; o cliente decide pela string `erro`, sem depender do texto da mensagem.
+- Códigos: `INVALID_REQUEST` para entrada inválida (não entra na fila), `DUPLICATE` para registro pendente repetido, `TIMEOUT` para falta de par no prazo e `INTERRUPTED` para interrupção da espera no servidor quando possível retornar ao cliente.
+- Duplicidade: comparar IP numérico normalizado, porta e protocolo de pedidos pendentes. Rejeitar a nova chamada, preservando o pedido original e seu prazo. Um endpoint TCP e um UDP são registros distintos e nunca formam um par entre si.
+- Timeout: prazo padrão de **300 s**, contado a partir do recebimento do pedido válido; remover o pedido ao expirar e retornar TIMEOUT. Um pedido novo após receber TIMEOUT inicia outro prazo. Não prometer entrega se o cliente estiver desconectado.
+- Desistência: encerrar o cliente **não cancela imediatamente** o pedido no servidor. A limpeza ocorre pelo timeout, salvo se houver pareamento antes. Até expirar, o pedido abandonado pode ser pareado com outro jogador; esta limitação foi aceita. Não acrescentar método RMI ou campos de cancelamento.
+- Interrupção da thread de espera no servidor: remover o pedido ainda pendente, restaurar o estado de interrupção e retornar INTERRUPTED quando possível. Fechar o cliente não equivale a interromper essa thread no servidor. Se o par já foi concluído, preservar sua resposta.
+- Nenhuma nova tentativa automática. Após TIMEOUT, o usuário pode iniciar deliberadamente outro pedido. Após falha RMI, o resultado pode ser desconhecido se o pedido já tiver sido enviado; não reenviar automaticamente.
+- Falha de transporte/Registry: tratar localmente por exceção RMI, mostrar contexto e encerrar a tentativa; não inventar um JSON retornado pelo servidor. O cliente de diagnóstico mostra erros de aplicação com código/mensagem e termina com saída 1; sucesso termina com saída 0.
+
+Exemplo de erro (texto ilustrativo; os tipos e nomes dos campos são o contrato):
+
+```json
+{"erro":"TIMEOUT","mensagem":"Nenhum oponente encontrado em 300 segundos."}
+```
+
 ### 2. JSON sem dependências externas
 
 **Decisão atual do responsável (25/10/2026):** substituir `org.json` por `JsonUtil`, implementado com o JDK. Não há JAR para baixar nem pasta `lib/`. `JsonUtil.parseJson` lê objetos como `Map`, arrays como `List`, números como `BigDecimal`, além de strings, booleanos e `null`; `toJson` faz a conversão inversa. Chaves duplicadas, JSON malformado e aninhamento acima de 32 níveis são rejeitados. `JsonMessages` mantém o limite de entrada de 16384 bytes, valida UTF-8 e os campos do match. A decisão anterior de usar a biblioteca foi substituída por este pedido.
@@ -108,7 +129,7 @@ Em empate ou erro, não há vencedor automático (`vencedor: null`). A confirma�
 
 ### 4. Timeout, falhas e displays
 
-- Na espera por um adversário no **servidor de match**, limite de **300 segundos (5 minutos)**; ao esgotar, retirar a solicitação pendente da fila e informar timeout (formato do erro RMI ainda por definir).
+- Na espera por um adversário no **servidor de match**, limite de **300 segundos (5 minutos)**; ao esgotar, retirar a solicitação pendente da fila e informar timeout pelo JSON de erro aprovado.
 - Na espera pela resposta do outro jogador durante a partida, limite de **120 segundos (2 minutos)**; ao esgotar, partida encerrada por **inatividade**.
 - Falha durante a partida deve encerrá-la com **erro**, em vez de travar indefinidamente.
 - Falha ou ausência de display **não** pode bloquear a partida: publicação multicast é desacoplada.
@@ -135,7 +156,7 @@ O responsável definiu que a interoperabilidade será verificada **entre os comp
 | Item 1 — entendimento, decisões e dúvidas | **Em consolidação; decisões atualizadas** |
 | Item 2 — funcionamento explicado ponta a ponta | **Aguardando confirmação explícita** |
 | Arquitetura detalhada e classes | **Não iniciado** |
-| Java do match | **Base importada, sujeita à revisão das pendências** |
+| Java do match | **Base implementada; políticas de match aprovadas, validação em andamento** |
 | Integração e testes | Resultados atuais na seção 9 e quadro da seção 7 de `PLANO_DO_PROJETO.md`; comandos em `TESTES_MANUAIS.md` |
 | `PLANO_DO_PROJETO.md` | **Registro de acompanhamento criado antecipadamente a pedido do responsável; isso não inicia o item 6** |
 
@@ -143,7 +164,7 @@ Leia [`PLANO_DO_PROJETO.md`](PLANO_DO_PROJETO.md) para pendências e **BLOCO DE 
 
 ## Base Java importada em 25/10/2026
 
-O método `Main.getOponent` mantém a lógica de match na classe principal, conforme solicitado. `MatchService` é a interface remota; `JsonMessages` converte bytes UTF-8 e interpreta JSON via `JsonUtil`. Não há classe separada `MatchServer`. `PendingMatchRequest` guarda jogador, prazo e resposta; a espera usa `wait`/`notifyAll`, sob um único monitor. Não são usadas lambdas, futures de arrays nem notação de generics; `final` é permitido somente para constantes nomeadas, conforme a seção 9 de `AGENTS.md`. As coleções usam casts explícitos; por isso o compilador pode informar operações unchecked.
+Os programas possuem entradas separadas: `MatchServer.java` executa o servidor e mantém a lógica em `MatchServer.getOponent`; `Player.java` executa a busca por RMI e mostra a resposta; `Display.java` é uma entrada reservada que informa que a recepção multicast ainda não foi implementada. `MatchService` é a interface remota; `JsonMessages` converte bytes UTF-8 e interpreta JSON via `JsonUtil`. O registro transportado é representado por `JsonMessages.PlayerRegistration`, distinto do programa Player. A antiga classe `Main` foi removida. `PendingMatchRequest` guarda jogador, prazo e resposta; a espera usa `wait`/`notifyAll`, sob um único monitor. Não são usadas lambdas, futures de arrays nem notação de generics; `final` é permitido somente para constantes nomeadas, conforme a seção 9 de `AGENTS.md`. As coleções usam casts explícitos; por isso o compilador pode informar operações unchecked.
 
 A compilação e a execução exigem somente o JDK 17. Os comandos usam `/tmp/tictactoe-classes` para manter apenas fontes em `code/`; após reiniciar a máquina ou limpar `/tmp`, recompilar. As rotinas de servidor, cliente e JSON foram separadas em métodos simples, com constantes nomeadas e erros de configuração explícitos em português.
 
@@ -158,21 +179,30 @@ Servidor local (terminal 1):
 
 ```bash
 RMI_HOST=127.0.0.1 RMI_REGISTRY_PORT=1099 RMI_OBJECT_PORT=5021 RMI_SERVICE_NAME=MatchServiceLocal \
-  java -cp /tmp/tictactoe-classes Main server
+  java -cp /tmp/tictactoe-classes MatchServer
 ```
 
-Cliente de diagnóstico (terminal 2):
+Jogador — busca de oponente, sem partida ainda (terminal 2):
 
 ```bash
 RMI_HOST=127.0.0.1 RMI_REGISTRY_PORT=1099 RMI_SERVICE_NAME=MatchServiceLocal \
   PLAYER_IP=127.0.0.1 PLAYER_PORT=5010 PLAYER_PROTOCOL=tcp \
-  java -cp /tmp/tictactoe-classes Main client
+  java -cp /tmp/tictactoe-classes Player
 ```
 
-No terminal 3, repetir o cliente com `PLAYER_PORT=5011`. Ambos recebem o endpoint do oponente. O cliente é só de diagnóstico; não abre socket de jogadas.
+No terminal 3, repetir o cliente com `PLAYER_PORT=5011`. Ambos recebem o endpoint do oponente. O cliente é só de diagnóstico; não abre socket de jogadas. Ele valida a resposta JSON e mostra endpoint/iniciador no sucesso; erros aparecem com código e explicação em português, saída 1 e sem nova tentativa automática.
 
-O código importa detalhes do protótipo — filas por protocolo, `wait`/`notifyAll`, ordem de chegada, primeiro inicia, rejeição de duplicidade e JSON de erro com `erro`/`mensagem`. Esses detalhes devem ser revisados contra as pendências anteriores, e não tratados como contrato final já aprovado nesta pasta. Cancelamento explícito e retries não estão implementados.
+As políticas de fila, ordem de início, duplicidade e erros foram aprovadas pelo responsável em 25/10/2026 conforme o contrato acima. A implementação usa `wait`/`notifyAll`. Cancelamento imediato e novas tentativas automáticas não fazem parte desta versão; o pedido de cliente encerrado pode permanecer elegível para pareamento até expirar.
 
 `MATCH_TIMEOUT_SECONDS` tem padrão **300**, conforme a decisão anterior desta pasta. Testes podem reduzir esse parâmetro temporariamente. IP/portas são configuráveis; os padrões de VM permanecem `.14`, Registry `9821` e serviço `MatchService21`. A porta definitiva do objeto remoto nas VMs está pendente (`RMI_OBJECT_PORT` é obrigatório). Os valores locais `1099`/`5021` são exemplos. O prazo de 120 s durante a partida não é implementado por esta base do match.
 
 Os roteiros completos, incluindo teste com outro IP e portas, estão em `TESTES_MANUAIS.md`. Não foram importados Maven, Gradle, Gson, JUnit ou scripts de testes automatizados.
+
+
+Entrada reservada ao display:
+
+```bash
+java -cp /tmp/tictactoe-classes Display
+```
+
+No estado atual, mostra `Display multicast ainda não implementado.` e encerra; não abre socket. A implementação do tabuleiro, partida e recepção multicast continua pendente.

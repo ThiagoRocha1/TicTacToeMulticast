@@ -2,7 +2,7 @@
 
 > **Registro de continuidade inicial**, preparado em **24/10/2026** porque o responsável pediu para registrar as decisões no repositório. A criação antecipada deste arquivo **não constitui avanço ao item 2 nem conclusão do item 6** da sequência pedagógica.
 >
-> **Atualização em 25/10/2026:** o responsável solicitou a implementação do match e seu uso neste workspace. A base Java foi importada com o método de match dentro de `Main`. Por instrução posterior explícita, prevalecem as decisões anteriores desta pasta: **300 s** para match, **120 s** para resposta durante a partida, **utilitário JSON próprio (pedido posterior substitui org.json)** e testes **manuais**. As pendências anteriores continuam pendentes até consolidação; os detalhes trazidos do protótipo não são novas aprovações.
+> **Atualização em 25/10/2026:** o responsável solicitou a implementação do match e seu uso neste workspace. A base Java foi inicialmente importada com o método de match dentro de `Main`; por pedido posterior foi separada em `MatchServer`, `Player` e `Display`. Por instrução posterior explícita, prevalecem as decisões anteriores desta pasta: **300 s** para match, **120 s** para resposta durante a partida, **utilitário JSON próprio (pedido posterior substitui org.json)** e testes **manuais**. Depois dessas alterações, o responsável aprovou as políticas de match registradas na seção 4. As pendências de partida e ambiente permanecem abertas.
 
 ## 1. Fonte de verdade e organização
 
@@ -64,6 +64,12 @@ Não supor que o PDF está comitado no repositório sem verificar.
 | D18 | Cada partida terá um identificador **`partidaId` único**, incluído nas mensagens JSON de controle | **Aprovado** | Responsável; forma de criação/troca ainda pendente |
 | D19 | Protocolo de encerramento com eventos de controle **`fim`** e **`confirmacao_fim`** | **Aprovado** | Responsável; detalhes adicionais de payload ainda pendentes |
 | D20 | Campo **`vencedor`** nas mensagens finais: `1` = X, `2` = O, `null` = sem vencedor | **Aprovado** | Responsável |
+| D21 | Fila por protocolo em ordem de registro; primeiro inicia=true, segundo false | **Aprovado** | Responsável; não define X/O |
+| D22 | Erros JSON com strings erro/mensagem; códigos INVALID_REQUEST, DUPLICATE, TIMEOUT, INTERRUPTED | **Aprovado** | Responsável; texto explicativo em português |
+| D23 | Duplicata é IP normalizado + porta + protocolo de pedido pendente; preservar original e prazo | **Aprovado** | Responsável |
+| D24 | Sem cancelamento imediato ao encerrar cliente; pedido permanece até match ou timeout e pode parear com cliente encerrado | **Aprovado, com limitação aceita** | Responsável |
+| D25 | Sem retries automáticos; novo pedido deliberado após TIMEOUT; resultado possivelmente desconhecido em falha RMI | **Aprovado** | Responsável |
+| D26 | Interrupção da espera no servidor remove pedido pendente, restaura flag e retorna INTERRUPTED se possível; falha RMI tratada localmente | **Aprovado** | Responsável |
 
 **Interface implementada na base importada:**
 
@@ -102,6 +108,27 @@ Os JSONs acima são **exemplos ilustrativos**, não resultados de testes. Os eve
 
 Fluxo aprovado em termos gerais: autor da última jogada → adversário valida e envia `fim` → autor confirma com `confirmacao_fim` → encerramento. Falha de conexão pode impedir a confirmação remota; nesses casos deve haver tratamento local.
 
+
+### Contrato de match aprovado em 25/10/2026
+
+Estas são decisões do responsável para o sistema, complementares ao enunciado; não atribuir ao professor os códigos de erro ou as políticas abaixo.
+
+- Sucesso: JSON UTF-8 em `byte[]` com `ip` (texto), `porta` (inteiro 1..65535) e `inicia` (booleano). Parear por ordem de registro na fila de cada protocolo; primeiro recebe true, segundo false. Isso não define quem usa X/O na futura partida.
+- Erro de aplicação: JSON com `erro` e `mensagem`, ambos strings. `mensagem` explica a causa em português; o cliente decide pela string `erro`, sem depender do texto da mensagem.
+- Códigos: `INVALID_REQUEST` para entrada inválida (não entra na fila), `DUPLICATE` para registro pendente repetido, `TIMEOUT` para falta de par no prazo e `INTERRUPTED` para interrupção da espera no servidor quando possível retornar ao cliente.
+- Duplicidade: comparar IP numérico normalizado, porta e protocolo de pedidos pendentes. Rejeitar a nova chamada, preservando o pedido original e seu prazo. Um endpoint TCP e um UDP são registros distintos e nunca formam um par entre si.
+- Timeout: prazo padrão de **300 s**, contado a partir do recebimento do pedido válido; remover o pedido ao expirar e retornar TIMEOUT. Um pedido novo após receber TIMEOUT inicia outro prazo. Não prometer entrega se o cliente estiver desconectado.
+- Desistência: encerrar o cliente **não cancela imediatamente** o pedido no servidor. A limpeza ocorre pelo timeout, salvo se houver pareamento antes. Até expirar, o pedido abandonado pode ser pareado com outro jogador; esta limitação foi aceita. Não acrescentar método RMI ou campos de cancelamento.
+- Interrupção da thread de espera no servidor: remover o pedido ainda pendente, restaurar o estado de interrupção e retornar INTERRUPTED quando possível. Fechar o cliente não equivale a interromper essa thread no servidor. Se o par já foi concluído, preservar sua resposta.
+- Nenhuma nova tentativa automática. Após TIMEOUT, o usuário pode iniciar deliberadamente outro pedido. Após falha RMI, o resultado pode ser desconhecido se o pedido já tiver sido enviado; não reenviar automaticamente.
+- Falha de transporte/Registry: tratar localmente por exceção RMI, mostrar contexto e encerrar a tentativa; não inventar um JSON retornado pelo servidor. O cliente de diagnóstico mostra erros de aplicação com código/mensagem e termina com saída 1; sucesso termina com saída 0.
+
+Exemplo de erro (texto ilustrativo; os tipos e nomes dos campos são o contrato):
+
+```json
+{"erro":"TIMEOUT","mensagem":"Nenhum oponente encontrado em 300 segundos."}
+```
+
 ## 5. Arquitetura atual — somente conceitual
 
 ```text
@@ -114,16 +141,16 @@ Jogador A -- RMI --> Servidor de Match <-- RMI -- Jogador B
                       Display(s)
 ```
 
-Três programas previstos: **Servidor de Match**, **Jogador** e **Display**. A base do match já está implementada em `Main`, `MatchService`, `JsonMessages` e `JsonUtil`, diretamente em `code/`, com filas por protocolo e espera sincronizada. A implementação foi autorizada, mas os detalhes importados de fila, duplicidade e erros continuam sujeitos à consolidação do contrato. Jogador e Display ainda não foram implementados; suas estruturas internas e o fluxo completo de controle permanecem pendentes.
+Três programas previstos: **Servidor de Match**, **Jogador** e **Display**. As seis fontes estão diretamente em `code/`: `MatchServer`, `Player`, `Display`, `MatchService`, `JsonMessages` e `JsonUtil`. O servidor mantém as filas e a espera sincronizada; Player contém somente a busca RMI. Display é apenas uma entrada reservada com mensagem de funcionalidade pendente. A implementação e as políticas de fila, duplicidade, erros, timeout, desistência e ausência de retries automáticos foram aprovadas pelo responsável. A partida do jogador e a recepção multicast do Display ainda não foram implementadas; seus fluxos e contratos pendentes permanecem abertos.
 
 ## 6. Mapa de falhas (validação parcial; demais cenários não executados)
 
 | Módulo / falha | Reação desejada | Como testar futuramente (manual) | Status |
 | --- | --- | --- | --- |
-| Match: servidor/registry fora do ar | Reportar falha claramente, evitar espera infinita; limite de retries pendente | Não iniciar ou encerrar o servidor e tentar conectar jogadores | **Passou em localhost na última validação**: erro RMI contextualizado e saída 1; VMs não executadas |
-| Match: fila sem oponente | Após **300 s** sem par, remover pedido e informar timeout | Iniciar jogador isolado por 5 min; repetir registro após expiração | **Histórico: passou com 2 s**, inclusive novo registro após expiração; não reexecutado na última refatoração; prazo de 300 s não executado |
-| Match: registro duplicado | Comportamento atual rejeita duplicata sem substituir o primeiro pedido; contrato definitivo pendente | Registrar duas vezes o mesmo IP, porta e protocolo | **Passou em localhost na última validação**: DUPLICATE; primeiro pedido preservado e depois pareado |
-| Match: desistência do cliente | Política de cancelamento ainda pendente; não prometer remoção imediata ao fechar cliente | Interromper cliente enquanto aguarda o par | **Não executado**; cancelamento explícito não implementado |
+| Match: servidor/registry fora do ar | Reportar falha claramente, evitar espera infinita; sem retries automáticos | Não iniciar ou encerrar o servidor e tentar conectar jogadores | **Passou em localhost na última validação**: erro RMI contextualizado e saída 1; VMs não executadas |
+| Match: fila sem oponente | Após **300 s** sem par, remover pedido e informar timeout | Iniciar jogador isolado por 5 min; repetir registro após expiração | **Passou com o prazo real de 300 s na etapa do contrato aprovado**, seguido de novo registro do mesmo endpoint e pareamento; 2 s permanece como histórico |
+| Match: registro duplicado | Rejeitar duplicata, preservando pedido original e prazo; política aprovada | Registrar duas vezes o mesmo IP, porta e protocolo | **Passou em localhost na última validação**: DUPLICATE; primeiro pedido preservado e depois pareado |
+| Match: desistência do cliente | Política aprovada: sem cancelamento imediato; pedido pode parear até ser removido por match ou timeout | Interromper cliente enquanto aguarda o par | **Limitação observada**: duplicata após Ctrl+C e pareamento ao endpoint encerrado; variante de limpeza por timeout de cliente encerrado não executada |
 | Match: acessos concorrentes | Parear sem duplicar clientes e retornar para os dois | Iniciar vários jogadores simultaneamente | Par básico de duas chamadas: passou; carga maior não executada |
 | Jogador: oponente sem responder | Encerrar por **inatividade após 120 s** de espera de resposta | Deixar oponente sem responder por 120 s | Não executado |
 | Jogador: conexão interrompida | Encerrar por erro e liberar recursos; log local | Fechar um jogador durante a partida | Não executado |
@@ -142,7 +169,7 @@ Três programas previstos: **Servidor de Match**, **Jogador** e **Display**. A b
 | **1** | Regras do jogo e JSON | Lógica do tabuleiro + mensagens | Rodar manualmente e inspecionar saída no terminal | Utilitário JSON e mensagens de match implementados/testados; tabuleiro e mensagens de partida não iniciados |
 | **2** | Publicação/recepção multicast | Display simples | Executar display e remetente em localhost | Não iniciada |
 | **3** | Comunicação direta | Dois jogadores via TCP local | Jogar partida manual em terminais | Não iniciada |
-| **4** | RMI e concorrência | Servidor de match | Iniciar servidor e dois clientes em localhost | Base importada por solicitação; pendências de contrato preservadas |
+| **4** | RMI e concorrência | Servidor de match | Iniciar servidor e dois clientes em localhost | Políticas de match aprovadas; validação manual local em andamento |
 | **5** | Integração | Match + jogo em localhost | Partida completa, dois jogadores e display | Não iniciada |
 | **6** | Robustez | Timeouts, validações, tratamentos de falha | Cenários do mapa de falhas | Validações selecionadas do match executadas; demais módulos e cenários não iniciados |
 | **7** | Execução remota | Implantação nas três VMs | Match, partida e displays entre VMs | Não iniciada |
@@ -154,16 +181,16 @@ A divisão acima é **proposta de desenvolvimento**, não a sequência de itens 
 
 ### Quadro de resultados de testes
 
-Este quadro resume as execuções registradas na seção 9. **Passou** vale somente para o cenário observado; não significa validação completa do módulo. A seção 10 preserva o histórico anterior com org.json. Nenhum teste novo foi executado durante esta sincronização documental.
+Este quadro resume as execuções registradas na seção 9, incluindo a aplicação do contrato aprovado de match. **Passou** vale somente para o cenário observado; não significa validação completa do módulo. A seção 10 preserva o histórico anterior com org.json. A sincronização documental anterior não executou testes; a etapa posterior de contrato aprovado executou os testes descritos na seção 9.
 
 | Grupo | Resultado observado | Pendente / não executado |
 | --- | --- | --- |
 | Compilação | **Passou na última validação**, JDK 17; avisos unchecked esperados | Execução/compilação nas VMs |
-| Utilitário JSON / mensagens de match | **Passou na última validação**: leitura/escrita com escapes, Unicode, objetos, listas, números, booleanos e null; pedido válido; rejeição de chaves duplicadas, vírgula final, conteúdo extra e UTF-8 inválido | Outros limites de entrada/aninhamento e demais mensagens inválidas não registrados como executados |
+| Utilitário JSON / mensagens de match | **Passou na última validação**: leitura/escrita com escapes, Unicode, objetos, listas, números, booleanos e null; pedido válido; rejeição de chaves duplicadas, vírgula final, conteúdo extra e UTF-8 inválido | Nesta etapa também passaram leitura de respostas de sucesso/quatro erros e rejeição de inicia textual, mensagem ausente e UTF-8 inválido; demais limites de entrada/aninhamento não executados |
 | Tabuleiro / mensagens de partida | **Não executado** | Módulo do jogo ainda não implementado |
-| RMI / pareamento | **Passou na última validação**: dois clientes TCP localhost, endpoints corretos, primeiro inicia=true e segundo=false | Protocolos distintos, IP alternativo, carga maior e interrupção não executados nesta base atual |
-| Falhas do match / configuração | **Passou na última validação**: duplicidade, servidor indisponível, porta/timeout não numéricos e timeout excessivo | Falha de registro/exportação, serviço ausente no Registry e desistência do cliente não executados |
-| Timeout do match | **Histórico: passou com 2 s**, incluindo novo registro após expiração, antes das últimas refatorações | Não reexecutado na última validação; prazo padrão de **300 s não executado** |
+| RMI / pareamento | **Passou na etapa do contrato aprovado**: par TCP e par UDP em filas separadas, endpoints corretos, primeiro inicia=true e segundo=false; protocolos distintos aguardaram simultaneamente | IP alternativo, carga maior e interrupção real ainda não executados |
+| Falhas do match / configuração | **Passou na etapa do contrato aprovado**: duplicidade, protocolo inválido, servidor indisponível, serviço ausente e desistência com pedido preservado; configuração numérica validada na etapa anterior | Falha de registro/exportação e interrupção real não executadas |
+| Timeout do match | **Passou com 300 s na etapa do contrato aprovado**, saída TIMEOUT sem retry; novo registro do mesmo endpoint pareou corretamente | Limpeza por timeout de cliente encerrado sem novo par não executada; teste anterior de 2 s é histórico |
 | Socket TCP / partida | **Não executado** | Todos os cenários; módulo não implementado |
 | Multicast / display | **Não executado** | Todos os cenários; módulo não implementado |
 | Três VMs | **Não executado** | Todos os cenários |
@@ -174,15 +201,25 @@ Este quadro resume as execuções registradas na seção 9. **Passou** vale some
 1. **Mensagens de controle:** `partidaId`, eventos `fim` / `confirmacao_fim` e `vencedor` 1/2/null já aprovados; ainda definir campos restantes, tratamento de erro/refazer, empate e desconexão; alinhar a alternativa escolhida com o PDF, que sugere devolver a própria mensagem em caso de erro.
 2. **Perspectiva de `Resultado`:** `vit`/`der` é do emissor ou do receptor? Como detalhar as mensagens de confirmação e empate? Quem é X/O (a regra `inicia=true` = X foi sugerida, ainda não confirmada)?
 3. **Tabuleiro no pacote:** estado anterior ou posterior à `Jogada`? Validar consistência e vez de cada jogador.
-4. **Servidor de match:** timeout de **300 s já definido**; pendentes formato da resposta de timeout no RMI, cancelamento de pedido, jogador duplicado, fila e duas chamadas pendentes.
+4. **Servidor de match:** políticas aprovadas na seção 4; falta concluir os testes manuais e validar configuração nas VMs. Cancelamento imediato e retries automáticos foram excluídos desta versão por decisão do responsável.
 5. **Timeout após rejeição:** relógio do turno de 120 s reinicia ou permanece correndo? Proposta anterior era não reiniciar; não foi confirmada.
 6. **Formato no socket TCP:** delimitação de mensagens, framing, organização das respostas, encerramento. `JSON por linha` foi proposto, mas não confirmado.
 7. **JSON:** dependência externa removida por pedido do responsável; não há mais escolha de versão/JAR pendente.
 8. **Ambiente:** portas dos jogadores, anúncio IP de RMI, multicast entre VMs, interface e TTL.
-9. **Resiliência:** política de tentativas RMI, falha em match e tratamento UDP quando sua etapa chegar.
+9. **Resiliência:** no match, já aprovado encerrar a tentativa em falha RMI sem retry automático, reconhecendo resultado possivelmente desconhecido. Permanecem as decisões de tolerância a falhas durante a partida e UDP quando sua etapa chegar.
 10. **`partidaId`:** decidir como gerar e comunicar entre jogadores, sem acrescentar campos à resposta RMI do professor sem aprovação.
 
 ## 9. Última mudança registrada
+
+**25/10/2026 — programas separados a pedido do responsável:** substituído `Main.java` por `MatchServer.java` (servidor e getOponent) e `Player.java` (busca RMI e apresentação). Criado `Display.java` somente com entrada reservada que informa recepção multicast ainda não implementada; não abre sockets. Dados internos renomeados para `JsonMessages.PlayerRegistration`, evitando confusão com o programa Player. Políticas e assinatura RMI preservadas. Comandos atualizados; não usar mais os argumentos server/client de Main.
+
+Compilação Java 17 para `/tmp/tictactoe-separated`: **passou**, com avisos unchecked esperados. Teste manual local com MatchServer, Registry 1099, objeto 5021, serviço MatchServiceLocal, Players TCP 5010/5011: **passou**, ambos retornaram os endpoints corretos; primeiro inicia, segundo aguarda. Servidor encerrado. Execução de Display: **passou somente como entrada reservada**, mostrando o aviso previsto; isso não valida multicast. Timeout real de 300 s e demais falhas da etapa anterior não foram reexecutados nesta reorganização; evidências anteriores preservadas abaixo. Fontes apenas em code, sem classes compiladas no projeto.
+
+**25/10/2026 — contrato de match aprovado e aplicado:** o responsável aprovou as políticas D21–D26 após a proposta nesta conversa. Documentação atualizada para remover essas decisões das pendências. `JsonMessages` valida respostas de sucesso/erro e compartilha a leitura UTF-8 entre pedidos e respostas; códigos nomeados como constantes. O cliente mostra endpoint e quem inicia no sucesso, ou código/mensagem no erro com saída 1; falha de comunicação avisa sobre possível resultado desconhecido, sem retry. Nenhum campo ou método novo de cancelamento foi acrescentado. Partida e display continuam fora desta etapa.
+
+Compilação com JDK 17.0.21+9 para `/tmp/tictactoe-approved-match`: **passou**, avisos unchecked esperados. Testes manuais locais: dois pares separados TCP 5010/5011 e UDP 5012/5013, com pedidos de protocolos distintos pendentes simultaneamente; duplicata preservando o pedido TCP; entrada com protocolo http; serviço ausente no Registry; servidor indisponível sem retry: **passou**. Registry 1099, objeto 5021, serviço MatchServiceLocal. Respostas validadas no JShell: sucesso, quatro códigos de erro, rejeição de inicia textual, mensagem ausente e UTF-8 inválido: **passou**. Isso não executa o fluxo real de interrupção da thread.
+
+Desistência: encerrado o cliente TCP 5014 por Ctrl+C; novo registro idêntico recebeu DUPLICATE; cliente 5015 foi pareado ao endpoint do cliente encerrado: **passou quanto à limitação aprovada**, sem comprovar uma partida ou disponibilidade. Servidor desses testes encerrado. Timeout padrão real de **300 s: passou** no Registry 1199, objeto 5121, serviço MatchTimeoutLocal, cliente TCP 6010; recebido TIMEOUT após aproximadamente cinco minutos, saída 1, sem retry. Depois, o mesmo endpoint 6010 entrou novamente e pareou com 6011: ambos retornaram corretamente, 6010 iniciou e não houve DUPLICATE. Servidor isolado encerrado. Testes de carga maior, interrupção real e VMs não executados nesta etapa.
 
 **25/10/2026 — sincronização documental solicitada:** atualizados o mapa de falhas, o quadro de testes, o estado da arquitetura/etapas e o bloco de retomada com as execuções já registradas. Separados resultados da última validação, timeout histórico de 2 s e cenários ainda não executados. Corrigida a referência dos resultados atuais para a seção 9; seção 10 mantida como histórico org.json. Nenhum fonte, contrato ou decisão de protocolo alterado; nenhum teste novo executado. README, AGENTS e roteiro manual apontam para esse registro atual.
 
@@ -206,7 +243,7 @@ Compilação Java 17 para `/tmp/tictactoe-personal-standards`: **passou**, com a
 
 Não foram importados Maven/Gson/JUnit nem scripts de testes automatizados. A versão `org.json:json:20240303` é apenas candidata para compilar a base importada; a versão definitiva continua pendente. O PDF foi preservado.
 
-O código importa filas TCP/UDP, espera com `wait`/`notifyAll`, FIFO, primeiro inicia, rejeição de duplicidade e JSON de erro (`erro`/`mensagem`, códigos `TIMEOUT`, `DUPLICATE`, `INVALID_REQUEST`, `INTERRUPTED`). Esses detalhes são comportamentos da base importada e devem ser revisados, sem marcar as pendências anteriores de contrato como aprovadas. Cancelamento explícito e retries continuam pendentes. Os parâmetros locais são exemplos substituíveis; a porta do objeto remoto nas VMs ainda precisa ser escolhida.
+O código importa filas TCP/UDP, espera com `wait`/`notifyAll`, FIFO, primeiro inicia, rejeição de duplicidade e JSON de erro (`erro`/`mensagem`, códigos `TIMEOUT`, `DUPLICATE`, `INVALID_REQUEST`, `INTERRUPTED`). Na importação esses detalhes ainda eram propostas. Posteriormente foram aprovadas as políticas da seção 4: sem cancelamento imediato e sem retries automáticos. Os parâmetros locais são exemplos substituíveis; a porta do objeto remoto nas VMs ainda precisa ser escolhida.
 
 ## 10. Histórico de validação da base org.json (anterior à substituição)
 
@@ -219,16 +256,16 @@ O código importa filas TCP/UDP, espera com `wait`/`notifyAll`, FIFO, primeiro i
 
 ## 11. Próximo passo exato
 
-1. Refatoração aos padrões pessoais, compilação, JSON, par RMI local e falhas selecionadas concluídos; resultados atuais na seção 9. Timeout padrão e demais cenários ainda exigem execução própria, sem reaproveitar evidência histórica.
-2. Consolidar as pendências do match já listadas na seção 8 antes de congelar o contrato; não apresentar os detalhes importados como escolhas previamente aprovadas.
-3. Definir a porta do objeto remoto e validar nas VMs quando houver ambiente disponível. Não antecipar jogo/display.
+1. Contrato de match aprovado; cliente interpreta as respostas. Compilação, timeout real de 300 s, novo registro após expiração, protocolos separados, duplicidade e testes locais da seção 9 concluídos.
+2. Preparar a validação nas VMs e executar os cenários ainda não cobertos quando pertinente: maior concorrência, IP alternativo, interrupção real e limpeza de pedido abandonado por timeout. A limitação de pareamento com cliente encerrado já foi observada e aceita; não reabrir as políticas aprovadas.
+3. Definir a porta do objeto remoto nas VMs e executar os roteiros remotos quando houver acesso disponível. Portas 5021/5121 foram usadas apenas em testes locais. Não antecipar jogo/display.
 
 ## BLOCO DE RETOMADA (copiar para outro chat)
 
-> Workspace `/home/thiago/Desktop/TicTacToeMulticast`; enunciado válido para 2026/1. Base do match implementada em quatro fontes diretamente em `code/`: `Main`, `MatchService`, `JsonMessages`, `JsonUtil`. Lógica de pareamento em `Main.getOponent`, RMI com entrada/saída `byte[]` e JSON UTF-8. Somente JDK 17, sem lib/JAR/Maven/Gson/JUnit ou testes automatizados. Estilo aprovado na seção 9 de AGENTS.md: nomes descritivos, métodos simples, comentários/mensagens em português, sem notação de generics/lambdas/futures; final apenas para constantes nomeadas. Coleções sem parâmetros de tipo usam casts; avisos unchecked são esperados.
+> Workspace `/home/thiago/Desktop/TicTacToeMulticast`; enunciado válido para 2026/1. Seis fontes diretamente em `code/`: `MatchServer`, `Player`, `Display`, `MatchService`, `JsonMessages`, `JsonUtil`. `Main.java` foi removido por pedido de separação dos programas. Lógica em `MatchServer.getOponent`, RMI com entrada/saída byte[] e JSON UTF-8. Somente JDK 17; sem lib/JAR/Maven/Gson/JUnit ou testes automatizados. Estilo aprovado na seção 9 de AGENTS.md: nomes descritivos, métodos simples, comentários/mensagens em português, sem notação de generics/lambdas/futures; final apenas para constantes nomeadas. Coleções sem parâmetros de tipo usam casts; avisos unchecked são esperados. Manter somente fontes em code; criar `/tmp/tictactoe-classes`, compilar com `javac -encoding UTF-8 -d /tmp/tictactoe-classes code/*.java`, executar com `java -cp /tmp/tictactoe-classes MatchServer`, `java -cp /tmp/tictactoe-classes Player` ou `java -cp /tmp/tictactoe-classes Display` e as variáveis do README.
 >
-> Parâmetros aprovados: NN=21, servidor 152.92.236.14, Registry 9821, multicast 225.1.1.21:8821, match 300 s, partida 120 s, TCP primeiro e jogo UDP somente depois. Porta do objeto remoto nas VMs ainda pendente. Para compilar, criar `/tmp/tictactoe-classes` e executar `javac -encoding UTF-8 -d /tmp/tictactoe-classes code/*.java`; executar servidor/cliente com `java -cp /tmp/tictactoe-classes Main server` ou `client`, configurando as variáveis descritas no README. Manter somente fontes em code.
+> Políticas de match **aprovadas**: fila por protocolo em ordem de registro, primeiro inicia=true; erros com strings erro/mensagem e códigos INVALID_REQUEST, DUPLICATE, TIMEOUT, INTERRUPTED; duplicata por IP normalizado/porta/protocolo preserva pedido e prazo; timeout padrão de 300 s remove pendência. Sem cancelamento imediato ao fechar cliente: pedido pode parear até expirar, limitação aceita. Sem retries automáticos; usuário pode pedir novamente após TIMEOUT; falha RMI pode deixar resultado desconhecido. Cliente valida respostas e mostra endpoint/iniciador ou erro explicativo, saídas 0/1. Sucesso mantém apenas ip/porta/inicia; nenhum método/campo novo de cancelamento. Essas políticas não estão mais pendentes.
 >
-> Última validação do código: compilação, JSON, par RMI local TCP 5010/5011, duplicidade, configuração numérica inválida e servidor indisponível **passaram**. Timeout de **2 s** e novo registro após expiração passaram **em uma revisão anterior**, sem reexecução na última validação. Prazo padrão de **300 s nunca testado**. Protocolos distintos, IP alternativo, carga maior, interrupção, cancelamento e VMs continuam sem validação registrada na base atual. Resultados atuais e histórico das refatorações na seção 9; quadro consolidado na seção 7; seção 10 é apenas histórico org.json. Roteiros em TESTES_MANUAIS.md. Esta sincronização documental não executou testes.
+> Após separar as classes, compilação, pareamento TCP local com MatchServer/Player e execução do aviso de Display passaram; timeout e falhas não reexecutados nessa reorganização. Display não recebe multicast e Player ainda não joga. Validação da etapa anterior em localhost: compilação, respostas de sucesso/quatro códigos e rejeições de tipos/UTF-8, par TCP 5010/5011 e par UDP 5012/5013 separados, duplicidade, protocolo inválido, serviço ausente, servidor indisponível sem retry e desistência com pedido ainda elegível para match **passaram**. Timeout real de **300 s passou** em servidor isolado; novo registro do mesmo endpoint pareou com 6011 sem duplicidade. Teste de 2 s é histórico anterior. Ambos os servidores locais foram encerrados. Maior concorrência, interrupção real, IP alternativo, limpeza por timeout de cliente encerrado sem novo par e VMs ainda não executados. Classificação de pedidos UDP não implementa jogo UDP. Resultados atuais/histórico na seção 9; quadro na seção 7; seção 10 apenas histórico org.json; roteiros em TESTES_MANUAIS.md.
 >
-> Próximo passo: consolidar formato de erros/timeout do match, duplicidade, cancelamento e retries antes de congelar o contrato; completar os testes manuais pendentes e depois validar nas VMs. Comportamentos existentes não equivalem a aprovação definitiva dessas políticas. Jogador, partida TCP, display multicast e jogo UDP ainda não implementados; não avançar sem escopo. Permanecem pendentes os detalhes de mensagens de controle, criação/troca de partidaId e demais decisões listadas na seção 8. Não executar commit/push/merge/rebase nem descartar alterações sem pedido específico.
+> Parâmetros aprovados: NN=21, servidor 152.92.236.14, Registry 9821, multicast 225.1.1.21:8821, partida 120 s, TCP primeiro e jogo UDP depois. Porta do objeto remoto nas VMs continua pendente; 5021/5121 são exemplos locais. Próximo passo: definir/configurar essa porta e preparar validação nas VMs, completando cenários locais faltantes conforme necessário. Player tem somente a busca RMI e Display somente a entrada reservada; partida TCP e recepção multicast continuam pendentes, sem avançar sem escopo. Continuam pendentes mensagens da partida, criação/troca de partidaId, perspectiva de Resultado, tabuleiro antes/depois e framing TCP, conforme seção 8. Não executar commit/push/merge/rebase ou descartar alterações sem pedido específico.

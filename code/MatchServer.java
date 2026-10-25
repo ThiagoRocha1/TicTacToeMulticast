@@ -1,6 +1,4 @@
-import java.nio.charset.StandardCharsets;
 import java.rmi.NoSuchObjectException;
-import java.rmi.NotBoundException;
 import java.rmi.Remote;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
@@ -14,7 +12,7 @@ import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-public class Main implements MatchService {
+public class MatchServer implements MatchService {
     private static final int DEFAULT_MATCH_TIMEOUT_SECONDS = 300;
     private static final int MIN_PORT_NUMBER = 1;
     private static final int MAX_PORT_NUMBER = 65535;
@@ -23,17 +21,17 @@ public class Main implements MatchService {
     private long matchTimeoutNanoseconds;
 
     private static class PendingMatchRequest {
-        JsonMessages.Player player;
+        JsonMessages.PlayerRegistration player;
         long expirationNanoseconds;
         byte[] responseJson;
 
-        PendingMatchRequest(JsonMessages.Player player, long matchTimeoutNanoseconds) {
+        PendingMatchRequest(JsonMessages.PlayerRegistration player, long matchTimeoutNanoseconds) {
             this.player = player;
             expirationNanoseconds = System.nanoTime() + matchTimeoutNanoseconds;
         }
     }
 
-    public Main(Duration matchTimeout) {
+    public MatchServer(Duration matchTimeout) {
         matchTimeoutNanoseconds = matchTimeout.toNanos();
         if (matchTimeoutNanoseconds <= 0) {
             throw new IllegalArgumentException("Timeout deve ser positivo");
@@ -44,11 +42,11 @@ public class Main implements MatchService {
 
     @Override
     public byte[] getOponent(byte[] requestJson) {
-        JsonMessages.Player requestingPlayer;
+        JsonMessages.PlayerRegistration requestingPlayer;
         try {
             requestingPlayer = JsonMessages.readPlayerRequest(requestJson);
         } catch (IllegalArgumentException invalidRequest) {
-            return JsonMessages.createErrorResponse("INVALID_REQUEST", invalidRequest.getMessage());
+            return JsonMessages.createErrorResponse(JsonMessages.ERROR_INVALID_REQUEST, invalidRequest.getMessage());
         }
         PendingMatchRequest currentRequest = new PendingMatchRequest(requestingPlayer, matchTimeoutNanoseconds);
         ArrayDeque protocolRequests = (ArrayDeque) requestsByProtocol.get(requestingPlayer.getProtocol());
@@ -66,7 +64,7 @@ public class Main implements MatchService {
             for (Object queuedRequest : protocolRequests) {
                 PendingMatchRequest pendingRequest = (PendingMatchRequest) queuedRequest;
                 if (pendingRequest.player.hasSameEndpoint(requestingPlayer)) {
-                    return JsonMessages.createErrorResponse("DUPLICATE", "Jogador já está aguardando um oponente");
+                    return JsonMessages.createErrorResponse(JsonMessages.ERROR_DUPLICATE, "Jogador já está aguardando um oponente");
                 }
             }
             PendingMatchRequest opponentRequest = (PendingMatchRequest) protocolRequests.pollFirst();
@@ -90,7 +88,7 @@ public class Main implements MatchService {
                 } catch (InterruptedException interruptedWait) {
                     if (currentRequest.responseJson == null) {
                         protocolRequests.remove(currentRequest);
-                        currentRequest.responseJson = JsonMessages.createErrorResponse("INTERRUPTED", "Espera interrompida");
+                        currentRequest.responseJson = JsonMessages.createErrorResponse(JsonMessages.ERROR_INTERRUPTED, "Espera interrompida");
                     }
                     Thread.currentThread().interrupt();
                     break;
@@ -101,37 +99,21 @@ public class Main implements MatchService {
     }
 
     private byte[] createTimeoutResponse() {
-        return JsonMessages.createErrorResponse("TIMEOUT", "Nenhum oponente encontrado no prazo de "
+        return JsonMessages.createErrorResponse(JsonMessages.ERROR_TIMEOUT, "Nenhum oponente encontrado no prazo de "
                 + Duration.ofNanos(matchTimeoutNanoseconds).toMillis() + " ms");
     }
 
     public static void main(String[] arguments) {
         try {
-            if (arguments.length == 0) {
-                throw new IllegalArgumentException("Uso: java -cp /tmp/tictactoe-classes Main server|client");
-            }
             String serverHost = readEnvironmentVariable("RMI_HOST", "152.92.236.14");
             int registryPort = readPort("RMI_REGISTRY_PORT", "9821");
             String serviceName = readEnvironmentVariable("RMI_SERVICE_NAME", "MatchService21");
-
-            switch (arguments[0]) {
-                case "server":
-                    startMatchServer(serverHost, registryPort, serviceName);
-                    break;
-                case "client":
-                    requestOpponent(serverHost, registryPort, serviceName);
-                    break;
-                default:
-                    throw new IllegalArgumentException("Comando deve ser server ou client");
-            }
+            startMatchServer(serverHost, registryPort, serviceName);
         } catch (IllegalArgumentException invalidConfiguration) {
             System.err.println("Configuração inválida: " + invalidConfiguration.getMessage());
             System.exit(1);
-        } catch (RemoteException communicationFailure) {
-            System.err.println("Falha na comunicação RMI: " + communicationFailure.getMessage());
-            System.exit(1);
-        } catch (NotBoundException missingService) {
-            System.err.println("Serviço não encontrado no Registry: " + missingService.getMessage());
+        } catch (RemoteException serverFailure) {
+            System.err.println("Falha ao iniciar o servidor RMI: " + serverFailure.getMessage());
             System.exit(1);
         } catch (InterruptedException interruptedServer) {
             Thread.currentThread().interrupt();
@@ -145,7 +127,7 @@ public class Main implements MatchService {
         int remoteObjectPort = readPort("RMI_OBJECT_PORT", null);
         long matchTimeoutSeconds = readMatchTimeoutSeconds();
         System.setProperty("java.rmi.server.hostname", serverHost);
-        Main matchServer = new Main(Duration.ofSeconds(matchTimeoutSeconds));
+        MatchServer matchServer = new MatchServer(Duration.ofSeconds(matchTimeoutSeconds));
         MatchService remoteService = (MatchService) UnicastRemoteObject.exportObject(matchServer, remoteObjectPort);
         Registry matchRegistry;
 
@@ -171,26 +153,11 @@ public class Main implements MatchService {
         new CountDownLatch(1).await();
     }
 
-    private static void requestOpponent(String serverHost, int registryPort, String serviceName)
-            throws RemoteException, NotBoundException {
-        // A leitura e validação da configuração precedem o acesso à rede.
-        Map playerRequest = new HashMap();
-        playerRequest.put("ip", readEnvironmentVariable("PLAYER_IP", null));
-        playerRequest.put("porta", readPort("PLAYER_PORT", null));
-        playerRequest.put("protocolo", readEnvironmentVariable("PLAYER_PROTOCOL", "tcp"));
-        byte[] requestJson = JsonMessages.encodeObject(playerRequest);
-
-        Registry matchRegistry = LocateRegistry.getRegistry(serverHost, registryPort);
-        MatchService matchService = (MatchService) matchRegistry.lookup(serviceName);
-        byte[] responseJson = matchService.getOponent(requestJson);
-        System.out.println(new String(responseJson, StandardCharsets.UTF_8));
-    }
-
     private static class ServerShutdown implements Runnable {
         private Registry matchRegistry;
-        private Main matchServer;
+        private MatchServer matchServer;
 
-        ServerShutdown(Registry matchRegistry, Main matchServer) {
+        ServerShutdown(Registry matchRegistry, MatchServer matchServer) {
             this.matchRegistry = matchRegistry;
             this.matchServer = matchServer;
         }

@@ -8,16 +8,20 @@ import java.util.HashMap;
 import java.util.Map;
 
 class JsonMessages {
-    private static final int MAX_REQUEST_BYTES = 16384;
+    static final String ERROR_TIMEOUT = "TIMEOUT";
+    static final String ERROR_DUPLICATE = "DUPLICATE";
+    static final String ERROR_INVALID_REQUEST = "INVALID_REQUEST";
+    static final String ERROR_INTERRUPTED = "INTERRUPTED";
+    private static final int MAX_MESSAGE_BYTES = 16384;
     private static final int MIN_PORT_NUMBER = 1;
     private static final int MAX_PORT_NUMBER = 65535;
 
-    static class Player {
+    static class PlayerRegistration {
         private String ipAddress;
         private int portNumber;
         private String playerProtocol;
 
-        Player(String ipAddress, int portNumber, String playerProtocol) {
+        PlayerRegistration(String ipAddress, int portNumber, String playerProtocol) {
             this.ipAddress = ipAddress;
             this.portNumber = portNumber;
             this.playerProtocol = playerProtocol;
@@ -35,34 +39,61 @@ class JsonMessages {
             return playerProtocol;
         }
 
-        boolean hasSameEndpoint(Player otherPlayer) {
+        boolean hasSameEndpoint(PlayerRegistration otherPlayer) {
             return ipAddress.equals(otherPlayer.ipAddress)
                     && portNumber == otherPlayer.portNumber
                     && playerProtocol.equals(otherPlayer.playerProtocol);
         }
     }
 
-    static Player readPlayerRequest(byte[] requestBytes) {
-        if (requestBytes == null || requestBytes.length == 0 || requestBytes.length > MAX_REQUEST_BYTES) {
+    static PlayerRegistration readPlayerRequest(byte[] requestBytes) {
+        Map requestObject = readJsonObject(requestBytes);
+        String ipAddress = readRequiredString(requestObject, "ip");
+        String playerProtocol = readRequiredString(requestObject, "protocolo");
+        int portNumber = readPlayerPort(requestObject);
+        if (!playerProtocol.equals("tcp") && !playerProtocol.equals("udp")) {
+            throw new IllegalArgumentException("Protocolo deve ser tcp ou udp");
+        }
+        return new PlayerRegistration(validateNumericIpAddress(ipAddress), portNumber, playerProtocol);
+    }
+
+    static Map readMatchResponse(byte[] responseBytes) {
+        Map responseObject = readJsonObject(responseBytes);
+        if (responseObject.containsKey("erro")) {
+            String errorCode = readRequiredString(responseObject, "erro");
+            readRequiredString(responseObject, "mensagem");
+            switch (errorCode) {
+                case ERROR_TIMEOUT:
+                case ERROR_DUPLICATE:
+                case ERROR_INVALID_REQUEST:
+                case ERROR_INTERRUPTED:
+                    return responseObject;
+                default:
+                    throw new IllegalArgumentException("Código de erro desconhecido: " + errorCode);
+            }
+        }
+        validateNumericIpAddress(readRequiredString(responseObject, "ip"));
+        readPlayerPort(responseObject);
+        if (!(responseObject.get("inicia") instanceof Boolean)) {
+            throw new IllegalArgumentException("Campo inicia deve ser true ou false");
+        }
+        return responseObject;
+    }
+
+    private static Map readJsonObject(byte[] messageBytes) {
+        if (messageBytes == null || messageBytes.length == 0 || messageBytes.length > MAX_MESSAGE_BYTES) {
             throw new IllegalArgumentException("JSON ausente ou maior que 16384 bytes");
         }
         try {
             String jsonText = StandardCharsets.UTF_8.newDecoder()
                     .onMalformedInput(CodingErrorAction.REPORT)
                     .onUnmappableCharacter(CodingErrorAction.REPORT)
-                    .decode(ByteBuffer.wrap(requestBytes)).toString();
+                    .decode(ByteBuffer.wrap(messageBytes)).toString();
             Object parsedValue = JsonUtil.parseJson(jsonText);
             if (!(parsedValue instanceof Map)) {
                 throw new IllegalArgumentException("Esperado um único objeto JSON");
             }
-            Map jsonObject = (Map) parsedValue;
-            String ipAddress = readRequiredString(jsonObject, "ip");
-            String playerProtocol = readRequiredString(jsonObject, "protocolo");
-            int portNumber = readPlayerPort(jsonObject);
-            if (!playerProtocol.equals("tcp") && !playerProtocol.equals("udp")) {
-                throw new IllegalArgumentException("Protocolo deve ser tcp ou udp");
-            }
-            return new Player(validateNumericIpAddress(ipAddress), portNumber, playerProtocol);
+            return (Map) parsedValue;
         } catch (CharacterCodingException invalidEncoding) {
             throw new IllegalArgumentException("JSON ou codificação UTF-8 inválidos", invalidEncoding);
         }
@@ -113,7 +144,7 @@ class JsonMessages {
         }
     }
 
-    static byte[] createOpponentResponse(Player player, boolean startsMatch) {
+    static byte[] createOpponentResponse(PlayerRegistration player, boolean startsMatch) {
         Map opponentResponse = new HashMap();
         opponentResponse.put("ip", player.getIpAddress());
         opponentResponse.put("porta", player.getPortNumber());
