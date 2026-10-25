@@ -23,7 +23,7 @@ public class MatchServer implements MatchService {
     private static class PendingMatchRequest {
         JsonMessages.PlayerRegistration player;
         long expirationNanoseconds;
-        byte[] responseJson;
+        String responseJson;
 
         PendingMatchRequest(JsonMessages.PlayerRegistration player, long matchTimeoutNanoseconds) {
             this.player = player;
@@ -41,7 +41,7 @@ public class MatchServer implements MatchService {
     }
 
     @Override
-    public byte[] getOponent(byte[] requestJson) {
+    public String getOponent(String requestJson) {
         JsonMessages.PlayerRegistration requestingPlayer;
         try {
             requestingPlayer = JsonMessages.readPlayerRequest(requestJson);
@@ -98,7 +98,7 @@ public class MatchServer implements MatchService {
         }
     }
 
-    private byte[] createTimeoutResponse() {
+    private String createTimeoutResponse() {
         return JsonMessages.createErrorResponse(JsonMessages.ERROR_TIMEOUT, "Nenhum oponente encontrado no prazo de "
                 + Duration.ofNanos(matchTimeoutNanoseconds).toMillis() + " ms");
     }

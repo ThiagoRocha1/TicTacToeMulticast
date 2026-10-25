@@ -2,6 +2,8 @@
 
 Os formatos de erro, duplicidade, ordem de início, desistência por timeout e ausência de retries automáticos foram aprovados pelo responsável. O JSON no transporte permanece como documentado; o cliente agora mostra mensagens legíveis e encerra erros com saída 1. Não há garantia de entrega a clientes desconectados.
 
+O contrato RMI atual usa `String getOponent(String requestJson)`. Após atualizar, recompilar e reiniciar servidor e clientes com a mesma versão de MatchService; os resultados antigos com byte[] não comprovam esta assinatura. Nenhum teste de UTF-8 inválido se aplica diretamente à entrada String.
+
 Os comandos abaixo são executados em terminais separados, na raiz de `TicTacToeMulticast`. Exigem somente o JDK 17. O cliente é somente de diagnóstico: não executa jogadas.
 
 ## Preparação
@@ -91,7 +93,7 @@ Falha: pedido inválido entra na fila, servidor encerra por entrada inválida ou
 
 ## Resultados
 
-Registrar apenas execuções observadas na seção 9 do `PLANO_DO_PROJETO.md`, com ambiente e parâmetros usados, e refletir no quadro consolidado da seção 7. A seção 10 é histórico da versão org.json. O timeout de 2 s é histórico anterior. O prazo real de 300 s, novo registro após expiração, protocolos separados e a limitação de desistência foram executados na etapa do contrato aprovado; conferir evidências na seção 9 do plano. Compilação não comprova funcionamento entre VMs. Limpeza por timeout de pedido abandonado sem par, interrupção real, partida e multicast continuam exigindo execução própria.
+Registrar apenas execuções observadas na seção 9 do `PLANO_DO_PROJETO.md`, com ambiente e parâmetros usados, e refletir no quadro consolidado da seção 7. A seção 10 é histórico da versão org.json. O timeout de 2 s é histórico anterior. O prazo real de 300 s, novo registro após expiração, protocolos separados e desistência têm evidência com byte[]. Com String foram executados par local, duplicidade, IP inválido e timeout reduzido de 10 s, além das verificações de mensagens descritas na seção 9 do plano; repetir os demais casos antes de marcá-los como validados. Compilação não comprova funcionamento entre VMs. Limpeza por timeout de pedido abandonado sem par, interrupção real, partida e multicast continuam exigindo execução própria.
 
 ## 6. Utilitário JSON sem biblioteca
 
@@ -123,12 +125,12 @@ Esperado neste terminal: mapa com os três campos; JSON válido preservando aspa
 parse.invoke(null, "{\"a\":1,}")
 parse.invoke(null, "{\"a\":1,\"a\":2}")
 parse.invoke(null, "{} lixo")
-java.lang.reflect.Method player = loader.loadClass("JsonMessages").getDeclaredMethod("readPlayerRequest", byte[].class);
+java.lang.reflect.Method player = loader.loadClass("JsonMessages").getDeclaredMethod("readPlayerRequest", String.class);
 player.setAccessible(true);
-player.invoke(null, (Object) new byte[]{(byte)0xc3,(byte)0x28})
+player.invoke(null, (Object) null)
 ```
 
-Esperado: cada entrada inválida gera `InvocationTargetException` cuja causa é `IllegalArgumentException`; a última informa UTF-8 inválido. Sinais de falha: aceitar essas entradas, perder conteúdo no passo 3 ou encerrar o JShell inesperadamente.
+Esperado: cada entrada inválida gera `InvocationTargetException` cuja causa é `IllegalArgumentException`; a última informa JSON ausente. Sinais de falha: aceitar essas entradas, perder conteúdo no passo 3 ou encerrar o JShell inesperadamente.
 
 5. Encerrar com `/exit`. Repetir o caso 1 para verificar RMI com o utilitário; não usar o resultado histórico da versão org.json como prova desta implementação.
 
@@ -214,15 +216,15 @@ Objetivo: verificar tipos das respostas antes da apresentação no cliente. Pré
 
 ```java
 java.net.URLClassLoader loader = new java.net.URLClassLoader(new java.net.URL[]{java.nio.file.Path.of("/tmp/tictactoe-classes").toUri().toURL()});
-java.lang.reflect.Method readResponse = loader.loadClass("JsonMessages").getDeclaredMethod("readMatchResponse", byte[].class);
+java.lang.reflect.Method readResponse = loader.loadClass("JsonMessages").getDeclaredMethod("readMatchResponse", String.class);
 readResponse.setAccessible(true);
 ```
 
 2. Executar, uma expressão por vez:
 
 ```java
-readResponse.invoke(null, (Object) "{\"ip\":\"127.0.0.1\",\"porta\":5011,\"inicia\":true}".getBytes(java.nio.charset.StandardCharsets.UTF_8))
-readResponse.invoke(null, (Object) "{\"erro\":\"TIMEOUT\",\"mensagem\":\"Prazo esgotado\"}".getBytes(java.nio.charset.StandardCharsets.UTF_8))
+readResponse.invoke(null, (Object) "{\"ip\":\"127.0.0.1\",\"porta\":5011,\"inicia\":true}")
+readResponse.invoke(null, (Object) "{\"erro\":\"TIMEOUT\",\"mensagem\":\"Prazo esgotado\"}")
 ```
 
 Esperado: mapa com os campos e tipos corretos. Repetir o segundo comando substituindo TIMEOUT por DUPLICATE, INVALID_REQUEST e INTERRUPTED; todos devem ser aceitos como respostas de aplicação.
@@ -230,12 +232,12 @@ Esperado: mapa com os campos e tipos corretos. Repetir o segundo comando substit
 3. Provocar falhas:
 
 ```java
-readResponse.invoke(null, (Object) "{\"ip\":\"127.0.0.1\",\"porta\":5011,\"inicia\":\"true\"}".getBytes(java.nio.charset.StandardCharsets.UTF_8))
-readResponse.invoke(null, (Object) "{\"erro\":\"TIMEOUT\"}".getBytes(java.nio.charset.StandardCharsets.UTF_8))
-readResponse.invoke(null, (Object) new byte[]{(byte)0xc3,(byte)0x28})
+readResponse.invoke(null, (Object) "{\"ip\":\"127.0.0.1\",\"porta\":5011,\"inicia\":\"true\"}")
+readResponse.invoke(null, (Object) "{\"erro\":\"TIMEOUT\"}")
+readResponse.invoke(null, (Object) null)
 ```
 
-Esperado: cada expressão gera InvocationTargetException com causa IllegalArgumentException, indicando respectivamente inicia não booleano, mensagem ausente e UTF-8 inválido. Sinais de falha: aceitar uma dessas respostas ou tentar usá-la como sucesso. Encerrar com `/exit`. Aceitar um exemplo INTERRUPTED não comprova o fluxo de interrupção real da thread do servidor.
+Esperado: cada expressão gera InvocationTargetException com causa IllegalArgumentException, indicando respectivamente inicia não booleano, mensagem ausente e JSON nulo. Sinais de falha: aceitar uma dessas respostas ou tentar usá-la como sucesso. Encerrar com `/exit`. Aceitar um exemplo INTERRUPTED não comprova o fluxo de interrupção real da thread do servidor.
 
 
 ## 11. Entradas separadas por programa
@@ -253,3 +255,47 @@ java -cp /tmp/tictactoe-classes Display
 Esperado: `Display multicast ainda não implementado.`, saída 0. Esta é somente uma entrada reservada; não há recepção nem teste de multicast.
 
 Sinais de falha: ClassNotFoundException, necessidade dos antigos argumentos server/client, pareamento divergente ou anúncio de display funcional sem implementação. Falha de pareamento pode ser provocada encerrando MatchServer antes de executar Player; este deve mostrar falha RMI sem retry.
+
+
+## 12. Atualização do contrato RMI para String
+
+Objetivo: assegurar que a interface é a mesma no servidor e jogadores. Pré-requisitos: encerrar os processos antigos, atualizar MatchService.java e os fontes correspondentes em cada máquina; não misturar versões byte[] e String.
+
+1. Localmente, compilar conforme a preparação e executar o caso 1. Nas VMs com layout plano, em `~/tictactoe`, compilar com:
+
+```bash
+javac -encoding UTF-8 *.java
+```
+
+2. Recarregar a configuração de cada VM conforme o ambiente já preparado (`source ~/.bashrc` quando ele carrega `.env`). Na .14 iniciar:
+
+```bash
+java -cp . MatchServer
+```
+
+3. Na .16 e depois na .17, dentro de 300 s:
+
+```bash
+java -cp . Player
+```
+
+Esperado: ambos recebem IP/porta do adversário e papéis distintos, saídas 0; nenhuma conversão manual ou arquivo de stub precisa ser criado. Confirmar erros pelos casos 3 a 5, observando o prazo reduzido somente quando configurado explicitamente.
+
+4. Para conferir a assinatura no JShell do caso 10:
+
+```java
+loader.loadClass("MatchService").getDeclaredMethod("getOponent", String.class).getReturnType()
+```
+
+Esperado: `class java.lang.String`.
+
+5. Para provocar falha de validação sem usar bytes, executar no JShell com o método readResponse preparado no caso 10:
+
+```java
+readResponse.invoke(null, (Object) null)
+readResponse.invoke(null, " ".repeat(16385))
+```
+
+Esperado: InvocationTargetException com causa IllegalArgumentException, indicando JSON ausente ou maior que 16384 caracteres. String.length conta unidades UTF-16; isso é um limite local de entrada e não define a codificação do transporte RMI.
+
+Sinais de falha: método remoto não reconhecido ou incompatibilidade de interface, campos inválidos aceitos ou apenas um jogador retornando. Para investigar mistura de versões, verificar todos os fontes/compilados, parar processos antigos, recompilar e reiniciar; não copiar uma interface antiga para testar em serviço compartilhado. Encerrar o servidor de teste com Ctrl+C após observar os resultados.

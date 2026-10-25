@@ -47,8 +47,8 @@ Não supor que o PDF está comitado no repositório sem verificar.
 | D01 | Usar **TCP primeiro** e ampliar para UDP depois | **Aprovado** | Responsável |
 | D02 | Match considera pedidos TCP e UDP, pareando protocolos iguais | **Aprovado** | Responsável; pareamento por protocolo já consta no PDF |
 | D03 | Servidor RMI na VM `.14`; `NN=21` | **Aprovado** | Responsável |
-| D04 | Interface planejada `MatchService` com método `getOponent` recebendo e retornando **`byte[]`** | **Aprovado** | Responsável decidiu contra `String` como tipo de transporte |
-| D05 | JSON em **UTF-8**, convertido `byte[]` → `String` internamente para interpretação | **Aprovado** | Responsável concordou com a proposta apresentada |
+| D04 | Interface `MatchService` com método `getOponent` recebendo e retornando **`String`** | **Atualizado pelo responsável** | Pedido posterior substitui a decisão anterior de byte[] |
+| D05 | JSON textual em String no RMI; transporte feito pelo RMI, interpretação feita pelo utilitário | **Atualizado pelo responsável** | Sem conversão manual de bytes no match; sockets futuros mantêm decisões próprias pendentes |
 | D06 | Utilizar **`JsonUtil`**, somente JDK | **Aprovado pelo responsável** | Pedido posterior em 25/10/2026 substitui org.json; sem JAR externo |
 | D07 | `Tabuleiro`: `0` vazio, `1` X, `2` O | **Aprovado** | Responsável |
 | D08 | `Numero` é **global por partida**, começa em `0` e vai até `8` | **Aprovado** | Responsável |
@@ -75,7 +75,7 @@ Não supor que o PDF está comitado no repositório sem verificar.
 
 ```java
 // Interface MatchService estende java.rmi.Remote.
-byte[] getOponent(byte[] jsonIn) throws RemoteException;
+String getOponent(String jsonIn) throws RemoteException;
 ```
 
 **JSON do match (do PDF):**
@@ -113,7 +113,7 @@ Fluxo aprovado em termos gerais: autor da última jogada → adversário valida 
 
 Estas são decisões do responsável para o sistema, complementares ao enunciado; não atribuir ao professor os códigos de erro ou as políticas abaixo.
 
-- Sucesso: JSON UTF-8 em `byte[]` com `ip` (texto), `porta` (inteiro 1..65535) e `inicia` (booleano). Parear por ordem de registro na fila de cada protocolo; primeiro recebe true, segundo false. Isso não define quem usa X/O na futura partida.
+- Sucesso: JSON textual em `String` com `ip` (texto), `porta` (inteiro 1..65535) e `inicia` (booleano). Parear por ordem de registro na fila de cada protocolo; primeiro recebe true, segundo false. Isso não define quem usa X/O na futura partida.
 - Erro de aplicação: JSON com `erro` e `mensagem`, ambos strings. `mensagem` explica a causa em português; o cliente decide pela string `erro`, sem depender do texto da mensagem.
 - Códigos: `INVALID_REQUEST` para entrada inválida (não entra na fila), `DUPLICATE` para registro pendente repetido, `TIMEOUT` para falta de par no prazo e `INTERRUPTED` para interrupção da espera no servidor quando possível retornar ao cliente.
 - Duplicidade: comparar IP numérico normalizado, porta e protocolo de pedidos pendentes. Rejeitar a nova chamada, preservando o pedido original e seu prazo. Um endpoint TCP e um UDP são registros distintos e nunca formam um par entre si.
@@ -148,7 +148,7 @@ Três programas previstos: **Servidor de Match**, **Jogador** e **Display**. As 
 | Módulo / falha | Reação desejada | Como testar futuramente (manual) | Status |
 | --- | --- | --- | --- |
 | Match: servidor/registry fora do ar | Reportar falha claramente, evitar espera infinita; sem retries automáticos | Não iniciar ou encerrar o servidor e tentar conectar jogadores | **Passou em localhost na última validação**: erro RMI contextualizado e saída 1; VMs não executadas |
-| Match: fila sem oponente | Após **300 s** sem par, remover pedido e informar timeout | Iniciar jogador isolado por 5 min; repetir registro após expiração | **Passou com o prazo real de 300 s na etapa do contrato aprovado**, seguido de novo registro do mesmo endpoint e pareamento; 2 s permanece como histórico |
+| Match: fila sem oponente | Após **300 s** sem par, remover pedido e informar timeout | Iniciar jogador isolado por 5 min; repetir registro após expiração | **String: passou com 10 s**. Prazo real de 300 s e novo registro após expiração passaram antes da mudança de assinatura; repetir na nova versão |
 | Match: registro duplicado | Rejeitar duplicata, preservando pedido original e prazo; política aprovada | Registrar duas vezes o mesmo IP, porta e protocolo | **Passou em localhost na última validação**: DUPLICATE; primeiro pedido preservado e depois pareado |
 | Match: desistência do cliente | Política aprovada: sem cancelamento imediato; pedido pode parear até ser removido por match ou timeout | Interromper cliente enquanto aguarda o par | **Limitação observada**: duplicata após Ctrl+C e pareamento ao endpoint encerrado; variante de limpeza por timeout de cliente encerrado não executada |
 | Match: acessos concorrentes | Parear sem duplicar clientes e retornar para os dois | Iniciar vários jogadores simultaneamente | Par básico de duas chamadas: passou; carga maior não executada |
@@ -181,20 +181,20 @@ A divisão acima é **proposta de desenvolvimento**, não a sequência de itens 
 
 ### Quadro de resultados de testes
 
-Este quadro resume as execuções registradas na seção 9, incluindo a aplicação do contrato aprovado de match. **Passou** vale somente para o cenário observado; não significa validação completa do módulo. A seção 10 preserva o histórico anterior com org.json. A sincronização documental anterior não executou testes; a etapa posterior de contrato aprovado executou os testes descritos na seção 9.
+A versão atual usa **String no RMI**. Evidências da versão byte[] permanecem na seção 9 como histórico, sem comprovar esta assinatura. Resultados locais observados pelo agente e relatos do responsável são identificados separadamente.
 
-| Grupo | Resultado observado | Pendente / não executado |
+| Grupo | Resultado observado na versão String | Pendente / histórico |
 | --- | --- | --- |
-| Compilação | **Passou na última validação**, JDK 17; avisos unchecked esperados | Execução/compilação nas VMs |
-| Utilitário JSON / mensagens de match | **Passou na última validação**: leitura/escrita com escapes, Unicode, objetos, listas, números, booleanos e null; pedido válido; rejeição de chaves duplicadas, vírgula final, conteúdo extra e UTF-8 inválido | Nesta etapa também passaram leitura de respostas de sucesso/quatro erros e rejeição de inicia textual, mensagem ausente e UTF-8 inválido; demais limites de entrada/aninhamento não executados |
-| Tabuleiro / mensagens de partida | **Não executado** | Módulo do jogo ainda não implementado |
-| RMI / pareamento | **Passou na etapa do contrato aprovado**: par TCP e par UDP em filas separadas, endpoints corretos, primeiro inicia=true e segundo=false; protocolos distintos aguardaram simultaneamente | IP alternativo, carga maior e interrupção real ainda não executados |
-| Falhas do match / configuração | **Passou na etapa do contrato aprovado**: duplicidade, protocolo inválido, servidor indisponível, serviço ausente e desistência com pedido preservado; configuração numérica validada na etapa anterior | Falha de registro/exportação e interrupção real não executadas |
-| Timeout do match | **Passou com 300 s na etapa do contrato aprovado**, saída TIMEOUT sem retry; novo registro do mesmo endpoint pareou corretamente | Limpeza por timeout de cliente encerrado sem novo par não executada; teste anterior de 2 s é histórico |
-| Socket TCP / partida | **Não executado** | Todos os cenários; módulo não implementado |
-| Multicast / display | **Não executado** | Todos os cenários; módulo não implementado |
-| Três VMs | **Não executado** | Todos os cenários |
-| Jogo por UDP | **Não iniciado / não executado** | A classificação TCP/UDP da fila não implementa jogo UDP |
+| Compilação | **Passou**, JDK 17.0.21+9; avisos unchecked esperados | Compilar a nova interface e todos os componentes nas VMs |
+| JSON / mensagens de match | **Passou**: pedido válido, sucesso/erro com acentos, rejeição de JSON malformado, null, mensagem ausente e mais de 16384 unidades UTF-16 | Parsing geral, tipos restantes e limites de aninhamento têm evidência anterior; bytes UTF-8 inválidos não se aplicam à entrada String |
+| RMI / pareamento | **Passou**: par TCP localhost 5010/5011, endpoints corretos, primeiro inicia e segundo aguarda | Separação TCP/UDP, IP alternativo, maior concorrência e interrupção real não reexecutados com String |
+| Falhas do match | **Passou**: DUPLICATE e INVALID_REQUEST por IP inválido, saídas 1 | Desistência, serviço ausente, servidor indisponível e demais falhas têm evidência anterior com byte[]; não reexecutados com String |
+| Timeout do match | **Passou com 10 s**, valor reduzido apenas para teste; TIMEOUT sem retry | Prazo real de 300 s e novo pedido após expiração passaram na versão byte[]; ainda não repetidos com String |
+| Três VMs | **Não executado com String** | Pareamento anterior relatado pelo responsável; atualizar e recompilar todas as VMs antes de repetir |
+| Tabuleiro / mensagens de partida | **Não executado** | Gameplay não implementado |
+| Socket TCP / partida | **Não executado** | Gameplay não implementado |
+| Multicast / display | **Não executado** | Display permanece entrada reservada |
+| Jogo por UDP | **Não iniciado / não executado** | Classificação de pedidos UDP não implementa jogo UDP |
 
 ## 8. Pendências e perguntas em aberto
 
@@ -210,6 +210,8 @@ Este quadro resume as execuções registradas na seção 9, incluindo a aplicaç
 10. **`partidaId`:** decidir como gerar e comunicar entre jogadores, sem acrescentar campos à resposta RMI do professor sem aprovação.
 
 ## 9. Última mudança registrada
+
+**25/10/2026 — contrato RMI alterado para String a pedido do responsável:** `MatchService`, `MatchServer`, `Player` e `JsonMessages` passam a receber/retornar JSON textual sem conversão manual de bytes. O RMI faz o marshalling/unmarshalling de String; o utilitário continua criando e validando JSON. A nova decisão substitui a assinatura byte[] anteriormente registrada. O limite defensivo agora usa 16384 unidades UTF-16 de String.length(), em vez de bytes. Recompilar e reiniciar todos os componentes nas VMs; não misturar interfaces antigas e novas. Registrada também a obrigação de sempre sugerir mensagem de commit após alterações, sem executar commit/push automaticamente. Compilação Java 17 para `/tmp/tictactoe-string-rmi`: **passou**, com avisos unchecked esperados. Testes manuais locais com a assinatura String: **passou** pareamento TCP 5010/5011 (ambos recebem endpoint e papel corretos), DUPLICATE para 5012 repetido, INVALID_REQUEST para IP 999.0.0.1 e TIMEOUT após 10 s sem par (redução somente no teste). Registry 1099, objeto 5021, serviço MatchServiceLocal. Textos com acentos preservados. Servidor encerrado. JShell confirmou retorno String na interface, leitura de pedido/sucesso/erro e rejeição de JSON malformado, null, mensagem ausente e comprimento maior que 16384: **passou**. O teste local precisou ser repetido após timeout da revisão automática de permissão; a repetição foi autorizada e executada. Prazo padrão permanece 300 s, sem reexecução completa nesta assinatura; evidências anteriores com byte[] são históricas. Pareamento nas VMs com a versão anterior foi **relatado pelo responsável**, sem saídas anexadas; a nova assinatura exige atualização, recompilação e novo teste nas VMs.
 
 **25/10/2026 — programas separados a pedido do responsável:** substituído `Main.java` por `MatchServer.java` (servidor e getOponent) e `Player.java` (busca RMI e apresentação). Criado `Display.java` somente com entrada reservada que informa recepção multicast ainda não implementada; não abre sockets. Dados internos renomeados para `JsonMessages.PlayerRegistration`, evitando confusão com o programa Player. Políticas e assinatura RMI preservadas. Comandos atualizados; não usar mais os argumentos server/client de Main.
 
@@ -256,16 +258,17 @@ O código importa filas TCP/UDP, espera com `wait`/`notifyAll`, FIFO, primeiro i
 
 ## 11. Próximo passo exato
 
-1. Contrato de match aprovado; cliente interpreta as respostas. Compilação, timeout real de 300 s, novo registro após expiração, protocolos separados, duplicidade e testes locais da seção 9 concluídos.
-2. Preparar a validação nas VMs e executar os cenários ainda não cobertos quando pertinente: maior concorrência, IP alternativo, interrupção real e limpeza de pedido abandonado por timeout. A limitação de pareamento com cliente encerrado já foi observada e aceita; não reabrir as políticas aprovadas.
+1. Atualizar MatchService e os componentes correspondentes nas três VMs, recompilar e reiniciar com a assinatura String; repetir o pareamento. Validação local String concluída conforme seção 9; resultados anteriores com byte[] são históricos.
+2. Revalidar as políticas aprovadas na nova assinatura conforme necessário: prazo completo de 300 s, novo pedido após expiração, protocolos distintos e falhas. Maior concorrência, IP alternativo, interrupção real e limpeza de pedido abandonado ainda precisam de execução própria. Não reabrir decisões aprovadas.
 3. Definir a porta do objeto remoto nas VMs e executar os roteiros remotos quando houver acesso disponível. Portas 5021/5121 foram usadas apenas em testes locais. Não antecipar jogo/display.
 
 ## BLOCO DE RETOMADA (copiar para outro chat)
 
-> Workspace `/home/thiago/Desktop/TicTacToeMulticast`; enunciado válido para 2026/1. Seis fontes diretamente em `code/`: `MatchServer`, `Player`, `Display`, `MatchService`, `JsonMessages`, `JsonUtil`. `Main.java` foi removido por pedido de separação dos programas. Lógica em `MatchServer.getOponent`, RMI com entrada/saída byte[] e JSON UTF-8. Somente JDK 17; sem lib/JAR/Maven/Gson/JUnit ou testes automatizados. Estilo aprovado na seção 9 de AGENTS.md: nomes descritivos, métodos simples, comentários/mensagens em português, sem notação de generics/lambdas/futures; final apenas para constantes nomeadas. Coleções sem parâmetros de tipo usam casts; avisos unchecked são esperados. Manter somente fontes em code; criar `/tmp/tictactoe-classes`, compilar com `javac -encoding UTF-8 -d /tmp/tictactoe-classes code/*.java`, executar com `java -cp /tmp/tictactoe-classes MatchServer`, `java -cp /tmp/tictactoe-classes Player` ou `java -cp /tmp/tictactoe-classes Display` e as variáveis do README.
+> Workspace `/home/thiago/Desktop/TicTacToeMulticast`; enunciado válido para 2026/1. Seis fontes diretamente em `code/`: `MatchServer`, `Player`, `Display`, `MatchService`, `JsonMessages`, `JsonUtil`. `Main.java` foi removido por pedido de separação dos programas. Lógica em `MatchServer.getOponent`, RMI com entrada/saída String contendo JSON; o RMI cuida do transporte e o utilitário faz o parsing. Esta decisão substitui byte[]; não há conversão manual de bytes no match. Somente JDK 17; sem lib/JAR/Maven/Gson/JUnit ou testes automatizados. Sempre sugerir mensagem de commit após alterações, sem executar commit/push automaticamente. Estilo aprovado na seção 9 de AGENTS.md: nomes descritivos, métodos simples, comentários/mensagens em português, sem notação de generics/lambdas/futures; final apenas para constantes nomeadas. Coleções sem parâmetros de tipo usam casts; avisos unchecked são esperados. Manter somente fontes em code; criar `/tmp/tictactoe-classes`, compilar com `javac -encoding UTF-8 -d /tmp/tictactoe-classes code/*.java`, executar com `java -cp /tmp/tictactoe-classes MatchServer`, `java -cp /tmp/tictactoe-classes Player` ou `java -cp /tmp/tictactoe-classes Display` e as variáveis do README.
 >
 > Políticas de match **aprovadas**: fila por protocolo em ordem de registro, primeiro inicia=true; erros com strings erro/mensagem e códigos INVALID_REQUEST, DUPLICATE, TIMEOUT, INTERRUPTED; duplicata por IP normalizado/porta/protocolo preserva pedido e prazo; timeout padrão de 300 s remove pendência. Sem cancelamento imediato ao fechar cliente: pedido pode parear até expirar, limitação aceita. Sem retries automáticos; usuário pode pedir novamente após TIMEOUT; falha RMI pode deixar resultado desconhecido. Cliente valida respostas e mostra endpoint/iniciador ou erro explicativo, saídas 0/1. Sucesso mantém apenas ip/porta/inicia; nenhum método/campo novo de cancelamento. Essas políticas não estão mais pendentes.
 >
-> Após separar as classes, compilação, pareamento TCP local com MatchServer/Player e execução do aviso de Display passaram; timeout e falhas não reexecutados nessa reorganização. Display não recebe multicast e Player ainda não joga. Validação da etapa anterior em localhost: compilação, respostas de sucesso/quatro códigos e rejeições de tipos/UTF-8, par TCP 5010/5011 e par UDP 5012/5013 separados, duplicidade, protocolo inválido, serviço ausente, servidor indisponível sem retry e desistência com pedido ainda elegível para match **passaram**. Timeout real de **300 s passou** em servidor isolado; novo registro do mesmo endpoint pareou com 6011 sem duplicidade. Teste de 2 s é histórico anterior. Ambos os servidores locais foram encerrados. Maior concorrência, interrupção real, IP alternativo, limpeza por timeout de cliente encerrado sem novo par e VMs ainda não executados. Classificação de pedidos UDP não implementa jogo UDP. Resultados atuais/histórico na seção 9; quadro na seção 7; seção 10 apenas histórico org.json; roteiros em TESTES_MANUAIS.md.
+> Validação atual String em localhost: compilação, par TCP 5010/5011, duplicidade, IP inválido, timeout reduzido de 10 s, mensagens com acentos e verificações de JSON válido/malformado/null/limite passaram. Servidor de teste encerrado. Prazo padrão continua 300 s; o teste completo e demais resultados anteriores com byte[] permanecem históricos, sem reexecução nessa assinatura. O responsável relatou pareamento anterior nas VMs, sem saídas anexadas; ainda não testado com String. Atualizar a mesma versão de MatchService, recompilar e reiniciar servidor e jogadores em todas as VMs antes de repetir. Gameplay e multicast não implementados. Resultados na seção 9, quadro na seção 7, seção 10 apenas histórico org.json; roteiros atualizados em TESTES_MANUAIS.md.
+
 >
 > Parâmetros aprovados: NN=21, servidor 152.92.236.14, Registry 9821, multicast 225.1.1.21:8821, partida 120 s, TCP primeiro e jogo UDP depois. Porta do objeto remoto nas VMs continua pendente; 5021/5121 são exemplos locais. Próximo passo: definir/configurar essa porta e preparar validação nas VMs, completando cenários locais faltantes conforme necessário. Player tem somente a busca RMI e Display somente a entrada reservada; partida TCP e recepção multicast continuam pendentes, sem avançar sem escopo. Continuam pendentes mensagens da partida, criação/troca de partidaId, perspectiva de Resultado, tabuleiro antes/depois e framing TCP, conforme seção 8. Não executar commit/push/merge/rebase ou descartar alterações sem pedido específico.

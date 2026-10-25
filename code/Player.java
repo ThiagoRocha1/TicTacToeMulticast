@@ -36,15 +36,15 @@ public class Player {
         playerRequest.put("ip", readEnvironmentVariable("PLAYER_IP", null));
         playerRequest.put("porta", readPort("PLAYER_PORT", null));
         playerRequest.put("protocolo", readEnvironmentVariable("PLAYER_PROTOCOL", "tcp"));
-        byte[] requestJson = JsonMessages.encodeObject(playerRequest);
+        String requestJson = JsonMessages.serializeObject(playerRequest);
 
         Registry matchRegistry = LocateRegistry.getRegistry(serverHost, registryPort);
         MatchService matchService = (MatchService) matchRegistry.lookup(serviceName);
-        byte[] responseJson = matchService.getOponent(requestJson);
+        String responseJson = matchService.getOponent(requestJson);
         displayMatchResponse(responseJson);
     }
 
-    private static void displayMatchResponse(byte[] responseJson) {
+    private static void displayMatchResponse(String responseJson) {
         Map matchResponse;
         try {
             matchResponse = JsonMessages.readMatchResponse(responseJson);

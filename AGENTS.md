@@ -32,8 +32,8 @@ Estas instruções se aplicam à raiz de `TicTacToeMulticast` e às subpastas, a
 | RMIRegistry | `9821` |
 | Multicast | Grupo `225.1.1.21`, porta `8821` |
 | JDK informado | Java `17.0.20.1` nas VMs |
-| Interface RMI | `MatchService`, método `getOponent` com entrada e saída **`byte[]`** |
-| Payload | JSON codificado em **UTF-8**; converter bytes para `String` **internamente** para interpretar o JSON |
+| Interface RMI | `MatchService`, método `getOponent` com entrada e saída **`String`**, por pedido posterior do responsável |
+| Payload | JSON textual em `String` no RMI; transporte/marshalling e unmarshalling feitos pelo RMI, parsing e validação feitos pelo `JsonUtil`/`JsonMessages` |
 | JSON | **`JsonUtil`**, somente JDK, por pedido posterior do responsável |
 | Tabuleiro | Nove inteiros: `0` vazia, `1` X, `2` O |
 | `Numero` | Contador **global da partida**, `0..8`, apenas jogadas aceitas avançam |
@@ -53,16 +53,18 @@ Estas instruções se aplicam à raiz de `TicTacToeMulticast` e às subpastas, a
 **Assinatura RMI na base importada:**
 
 ```java
-byte[] getOponent(byte[] jsonIn) throws RemoteException;
+String getOponent(String jsonIn) throws RemoteException;
 ```
 
 O servidor só deve efetuar o match de jogadores com o mesmo protocolo; deve retornar aos **dois** participantes, com um `inicia=true` e outro `inicia=false`. Evitar supor que chamadas RMI pendentes podem ser simplesmente descartadas sem tratar os clientes.
+
+**Transporte atualizado:** o responsável pediu explicitamente usar `String` no RMI em vez de byte[]. Recompilar a interface e os componentes em todas as máquinas e reiniciar os processos antigos; não misturar versões. Essa alteração não define framing/codificação dos futuros sockets TCP/UDP. O limite defensivo local passa a ser 16384 unidades de `String.length()` (UTF-16), em vez de bytes.
 
 ### 3.1. Políticas de match aprovadas posteriormente
 
 Estas são decisões do responsável para o sistema, complementares ao enunciado; não atribuir ao professor os códigos de erro ou as políticas abaixo.
 
-- Sucesso: JSON UTF-8 em `byte[]` com `ip` (texto), `porta` (inteiro 1..65535) e `inicia` (booleano). Parear por ordem de registro na fila de cada protocolo; primeiro recebe true, segundo false. Isso não define quem usa X/O na futura partida.
+- Sucesso: JSON textual em `String` com `ip` (texto), `porta` (inteiro 1..65535) e `inicia` (booleano). Parear por ordem de registro na fila de cada protocolo; primeiro recebe true, segundo false. Isso não define quem usa X/O na futura partida.
 - Erro de aplicação: JSON com `erro` e `mensagem`, ambos strings. `mensagem` explica a causa em português; o cliente decide pela string `erro`, sem depender do texto da mensagem.
 - Códigos: `INVALID_REQUEST` para entrada inválida (não entra na fila), `DUPLICATE` para registro pendente repetido, `TIMEOUT` para falta de par no prazo e `INTERRUPTED` para interrupção da espera no servidor quando possível retornar ao cliente.
 - Duplicidade: comparar IP numérico normalizado, porta e protocolo de pedidos pendentes. Rejeitar a nova chamada, preservando o pedido original e seu prazo. Um endpoint TCP e um UDP são registros distintos e nunca formam um par entre si.
@@ -101,7 +103,7 @@ Não implementar essas decisões pendentes silenciosamente.
 ## 6. Regras de engenharia e falhas
 
 - Java 17, com `java.net`, `java.rmi`, `java.util.concurrent` etc., **somente bibliotecas do JDK e o utilitário próprio `JsonUtil`**. Não introduzir frameworks ou outras bibliotecas sem autorização.
-- Por pedido do responsável, não usar notação de generics (parâmetros de tipo ou diamond), lambdas, switch com seta nem futures; usar `final` apenas para constantes nomeadas (exceção aprovada posteriormente); preferir coleções sem parâmetros de tipo com casts explícitos, laços, espera sincronizada e nomes descritivos. A assinatura RMI continua `byte[]`. Ao verificar compilação, usar uma pasta temporária fora do projeto para manter somente fontes em `code/`.
+- Por pedido do responsável, não usar notação de generics (parâmetros de tipo ou diamond), lambdas, switch com seta nem futures; usar `final` apenas para constantes nomeadas (exceção aprovada posteriormente); preferir coleções sem parâmetros de tipo com casts explícitos, laços, espera sincronizada e nomes descritivos. A assinatura RMI agora usa `String`, por pedido posterior que substitui a decisão anterior de byte[]. Não adicionar conversões manuais de bytes ao contrato RMI. Ao verificar compilação, usar uma pasta temporária fora do projeto para manter somente fontes em `code/`.
 - Código simples e didático; sem arquitetura sofisticada, abstrações de conveniência ou padrões avançados sem necessidade.
 - **Sem JUnit, Mockito ou testes automatizados.** Testes **manuais** mediante execução dos módulos em terminais. Consultar antes de sugerir ferramentas como `nc` ou `tcpdump`.
 - Cada módulo deve ser executável pelo terminal com parâmetros configuráveis. Primeiro demonstrar `localhost`, depois VMs `152.92.236.14`, `.16`, `.17`.
@@ -124,6 +126,8 @@ Não implementar essas decisões pendentes silenciosamente.
 7. Ao final de cada etapa ou quando o responsável pedir **“salvar progresso”**, entregar `PLANO_DO_PROJETO.md` atualizado **completo** e um **BLOCO DE RETOMADA** autocontido.
 8. Em outro chat, ao receber o plano ou bloco, resumir o estado em **três linhas**, confirmar e prosseguir somente na etapa aprovada.
 
+**Mensagens de commit:** após qualquer alteração, sempre sugerir uma mensagem de commit no encerramento. Sugerir não autoriza executar commit ou push.
+
 **Política Git:** não executar `reset --hard`, `clean -fd`, `commit`, `push`, `merge`, `rebase` nem reescrever histórico sem pedido específico. Nunca descartar alterações do usuário ou de outros agentes.
 
 ## 8. Estado atual e próxima ação
@@ -132,7 +136,7 @@ Não implementar essas decisões pendentes silenciosamente.
 - Mantidos os parâmetros e decisões deste repositório, inclusive 300 s de timeout de match e testes manuais.
 - `JsonUtil.java` substitui `org.json`; não há dependências externas nem pasta `lib/`.
 - Filas por protocolo, ordem de registro, duplicidade, erros de aplicação e limpeza por timeout são políticas aprovadas na seção 3.1. Espera com `wait`/`notifyAll`; sem retries automáticos ou cancelamento remoto imediato.
-- Roteiros de teste manual em `TESTES_MANUAIS.md`; resultados atuais na seção 9 e quadro consolidado na seção 7 de `PLANO_DO_PROJETO.md`. A seção 10 é histórico org.json; resultados do protótipo Gson não comprovam esta versão. O timeout real de 300 s e o novo registro após expiração passaram na etapa do contrato aprovado; 2 s é histórico anterior. Protocolos TCP/UDP separados e a limitação da desistência também foram observados nesta etapa.
+- Roteiros de teste manual em `TESTES_MANUAIS.md`; resultados atuais na seção 9 e quadro consolidado na seção 7 de `PLANO_DO_PROJETO.md`. A seção 10 é histórico org.json; resultados do protótipo Gson não comprovam esta versão. Na assinatura String, passaram compilação, par local, duplicidade, IP inválido e timeout reduzido de 10 s. Prazo real de 300 s, protocolos separados e desistência têm evidência histórica com byte[]; não reexecutados com String. Pareamento nas VMs foi relatado pelo responsável antes desta mudança; repetir após atualizar/recompilar todos os componentes.
 - Próxima ação: concluir a validação manual do contrato aprovado de match e preparar validação nas VMs com porta remota definida; não avançar para jogo/display nem criar testes automatizados.
 
 

@@ -42,12 +42,12 @@ As portas de escuta dos jogadores ainda não foram fixadas. Primeiro serão feit
 
 ### 1. Servidor de match (RMI)
 
-A interface remota terá **um método** chamado `getOponent`. A decisão atual é representar a requisição e a resposta como **`byte[]` contendo JSON UTF-8**, e não como `String` diretamente no contrato RMI. A conversão para texto ocorrerá **dentro do componente receptor**, para interpretação do JSON.
+A interface remota tem um método chamado `getOponent`, recebendo e retornando **`String` contendo JSON**. Por pedido posterior do responsável, esta assinatura substitui a versão anterior com byte[]. O RMI faz o marshalling/unmarshalling dos argumentos e resultados; `JsonUtil` e `JsonMessages` continuam responsáveis por criar, interpretar e validar o JSON. Não há conversão manual entre texto e bytes no match.
 
 **Assinatura implementada na base importada:**
 
 ```java
-byte[] getOponent(byte[] jsonIn) throws RemoteException;
+String getOponent(String jsonIn) throws RemoteException;
 ```
 
 Nome planejado para a interface: `MatchService` (estendendo `java.rmi.Remote`). A requisição e a resposta mantêm os campos definidos pelo PDF:
@@ -67,7 +67,7 @@ Endereços e portas dos exemplos são **ilustrativos**. O servidor considerará 
 
 Estas são decisões do responsável para o sistema, complementares ao enunciado; não atribuir ao professor os códigos de erro ou as políticas abaixo.
 
-- Sucesso: JSON UTF-8 em `byte[]` com `ip` (texto), `porta` (inteiro 1..65535) e `inicia` (booleano). Parear por ordem de registro na fila de cada protocolo; primeiro recebe true, segundo false. Isso não define quem usa X/O na futura partida.
+- Sucesso: JSON textual em `String` com `ip` (texto), `porta` (inteiro 1..65535) e `inicia` (booleano). Parear por ordem de registro na fila de cada protocolo; primeiro recebe true, segundo false. Isso não define quem usa X/O na futura partida.
 - Erro de aplicação: JSON com `erro` e `mensagem`, ambos strings. `mensagem` explica a causa em português; o cliente decide pela string `erro`, sem depender do texto da mensagem.
 - Códigos: `INVALID_REQUEST` para entrada inválida (não entra na fila), `DUPLICATE` para registro pendente repetido, `TIMEOUT` para falta de par no prazo e `INTERRUPTED` para interrupção da espera no servidor quando possível retornar ao cliente.
 - Duplicidade: comparar IP numérico normalizado, porta e protocolo de pedidos pendentes. Rejeitar a nova chamada, preservando o pedido original e seu prazo. Um endpoint TCP e um UDP são registros distintos e nunca formam um par entre si.
@@ -85,9 +85,9 @@ Exemplo de erro (texto ilustrativo; os tipos e nomes dos campos são o contrato)
 
 ### 2. JSON sem dependências externas
 
-**Decisão atual do responsável (25/10/2026):** substituir `org.json` por `JsonUtil`, implementado com o JDK. Não há JAR para baixar nem pasta `lib/`. `JsonUtil.parseJson` lê objetos como `Map`, arrays como `List`, números como `BigDecimal`, além de strings, booleanos e `null`; `toJson` faz a conversão inversa. Chaves duplicadas, JSON malformado e aninhamento acima de 32 níveis são rejeitados. `JsonMessages` mantém o limite de entrada de 16384 bytes, valida UTF-8 e os campos do match. A decisão anterior de usar a biblioteca foi substituída por este pedido.
+**Decisão atual do responsável (25/10/2026):** substituir `org.json` por `JsonUtil`, implementado com o JDK. Não há JAR para baixar nem pasta `lib/`. `JsonUtil.parseJson` lê objetos como `Map`, arrays como `List`, números como `BigDecimal`, além de strings, booleanos e `null`; `toJson` faz a conversão inversa. Chaves duplicadas, JSON malformado e aninhamento acima de 32 níveis são rejeitados. `JsonMessages` limita a entrada a 16384 unidades de `String.length()` (UTF-16) e valida os campos do match. O limite passou de bytes para comprimento de String ao remover a conversão manual. A decisão anterior de usar a biblioteca foi substituída por este pedido.
 
-Serialização proposta/aprovada no transporte: JSON como texto codificado em **UTF-8**, transmitido em `byte[]`. O contrato de enquadramento das mensagens nos sockets (por exemplo, JSON por linha no TCP) **ainda precisa ser consolidado** antes de implementar.
+No RMI, o JSON é passado como `String` e o próprio RMI cuida do transporte. A codificação e delimitação dos futuros sockets não são definidas por essa assinatura. O contrato de enquadramento das mensagens nos sockets (por exemplo, JSON por linha no TCP) **ainda precisa ser consolidado** antes de implementar.
 
 ### 3. Mensagens de jogada e controle
 
@@ -164,7 +164,7 @@ Leia [`PLANO_DO_PROJETO.md`](PLANO_DO_PROJETO.md) para pendências e **BLOCO DE 
 
 ## Base Java importada em 25/10/2026
 
-Os programas possuem entradas separadas: `MatchServer.java` executa o servidor e mantém a lógica em `MatchServer.getOponent`; `Player.java` executa a busca por RMI e mostra a resposta; `Display.java` é uma entrada reservada que informa que a recepção multicast ainda não foi implementada. `MatchService` é a interface remota; `JsonMessages` converte bytes UTF-8 e interpreta JSON via `JsonUtil`. O registro transportado é representado por `JsonMessages.PlayerRegistration`, distinto do programa Player. A antiga classe `Main` foi removida. `PendingMatchRequest` guarda jogador, prazo e resposta; a espera usa `wait`/`notifyAll`, sob um único monitor. Não são usadas lambdas, futures de arrays nem notação de generics; `final` é permitido somente para constantes nomeadas, conforme a seção 9 de `AGENTS.md`. As coleções usam casts explícitos; por isso o compilador pode informar operações unchecked.
+Os programas possuem entradas separadas: `MatchServer.java` executa o servidor e mantém a lógica em `MatchServer.getOponent`; `Player.java` executa a busca por RMI e mostra a resposta; `Display.java` é uma entrada reservada que informa que a recepção multicast ainda não foi implementada. `MatchService` é a interface remota; `JsonMessages` interpreta e valida as strings JSON via `JsonUtil`. O registro transportado é representado por `JsonMessages.PlayerRegistration`, distinto do programa Player. A antiga classe `Main` foi removida. `PendingMatchRequest` guarda jogador, prazo e resposta; a espera usa `wait`/`notifyAll`, sob um único monitor. Não são usadas lambdas, futures de arrays nem notação de generics; `final` é permitido somente para constantes nomeadas, conforme a seção 9 de `AGENTS.md`. As coleções usam casts explícitos; por isso o compilador pode informar operações unchecked.
 
 A compilação e a execução exigem somente o JDK 17. Os comandos usam `/tmp/tictactoe-classes` para manter apenas fontes em `code/`; após reiniciar a máquina ou limpar `/tmp`, recompilar. As rotinas de servidor, cliente e JSON foram separadas em métodos simples, com constantes nomeadas e erros de configuração explícitos em português.
 
@@ -206,3 +206,6 @@ java -cp /tmp/tictactoe-classes Display
 ```
 
 No estado atual, mostra `Display multicast ainda não implementado.` e encerra; não abre socket. A implementação do tabuleiro, partida e recepção multicast continua pendente.
+
+
+Ao atualizar uma VM da antiga assinatura byte[] para String, encerrar os processos Java antigos, atualizar os fontes correspondentes (incluindo `MatchService.java`), recompilar e reiniciar primeiro MatchServer e depois os Players. A interface compartilhada deve ter a mesma versão em todas as VMs. O nome do serviço e as variáveis de ambiente continuam iguais.

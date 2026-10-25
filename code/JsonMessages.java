@@ -1,9 +1,5 @@
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.nio.ByteBuffer;
-import java.nio.charset.CharacterCodingException;
-import java.nio.charset.CodingErrorAction;
-import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -12,7 +8,7 @@ class JsonMessages {
     static final String ERROR_DUPLICATE = "DUPLICATE";
     static final String ERROR_INVALID_REQUEST = "INVALID_REQUEST";
     static final String ERROR_INTERRUPTED = "INTERRUPTED";
-    private static final int MAX_MESSAGE_BYTES = 16384;
+    private static final int MAX_JSON_CHARACTERS = 16384;
     private static final int MIN_PORT_NUMBER = 1;
     private static final int MAX_PORT_NUMBER = 65535;
 
@@ -46,8 +42,8 @@ class JsonMessages {
         }
     }
 
-    static PlayerRegistration readPlayerRequest(byte[] requestBytes) {
-        Map requestObject = readJsonObject(requestBytes);
+    static PlayerRegistration readPlayerRequest(String requestJson) {
+        Map requestObject = readJsonObject(requestJson);
         String ipAddress = readRequiredString(requestObject, "ip");
         String playerProtocol = readRequiredString(requestObject, "protocolo");
         int portNumber = readPlayerPort(requestObject);
@@ -57,8 +53,8 @@ class JsonMessages {
         return new PlayerRegistration(validateNumericIpAddress(ipAddress), portNumber, playerProtocol);
     }
 
-    static Map readMatchResponse(byte[] responseBytes) {
-        Map responseObject = readJsonObject(responseBytes);
+    static Map readMatchResponse(String responseJson) {
+        Map responseObject = readJsonObject(responseJson);
         if (responseObject.containsKey("erro")) {
             String errorCode = readRequiredString(responseObject, "erro");
             readRequiredString(responseObject, "mensagem");
@@ -80,23 +76,15 @@ class JsonMessages {
         return responseObject;
     }
 
-    private static Map readJsonObject(byte[] messageBytes) {
-        if (messageBytes == null || messageBytes.length == 0 || messageBytes.length > MAX_MESSAGE_BYTES) {
-            throw new IllegalArgumentException("JSON ausente ou maior que 16384 bytes");
+    private static Map readJsonObject(String jsonText) {
+        if (jsonText == null || jsonText.length() == 0 || jsonText.length() > MAX_JSON_CHARACTERS) {
+            throw new IllegalArgumentException("JSON ausente ou maior que 16384 caracteres");
         }
-        try {
-            String jsonText = StandardCharsets.UTF_8.newDecoder()
-                    .onMalformedInput(CodingErrorAction.REPORT)
-                    .onUnmappableCharacter(CodingErrorAction.REPORT)
-                    .decode(ByteBuffer.wrap(messageBytes)).toString();
-            Object parsedValue = JsonUtil.parseJson(jsonText);
-            if (!(parsedValue instanceof Map)) {
-                throw new IllegalArgumentException("Esperado um único objeto JSON");
-            }
-            return (Map) parsedValue;
-        } catch (CharacterCodingException invalidEncoding) {
-            throw new IllegalArgumentException("JSON ou codificação UTF-8 inválidos", invalidEncoding);
+        Object parsedValue = JsonUtil.parseJson(jsonText);
+        if (!(parsedValue instanceof Map)) {
+            throw new IllegalArgumentException("Esperado um único objeto JSON");
         }
+        return (Map) parsedValue;
     }
 
     private static String readRequiredString(Map jsonObject, String fieldName) {
@@ -144,23 +132,23 @@ class JsonMessages {
         }
     }
 
-    static byte[] createOpponentResponse(PlayerRegistration player, boolean startsMatch) {
+    static String createOpponentResponse(PlayerRegistration player, boolean startsMatch) {
         Map opponentResponse = new HashMap();
         opponentResponse.put("ip", player.getIpAddress());
         opponentResponse.put("porta", player.getPortNumber());
         opponentResponse.put("inicia", startsMatch);
-        return encodeObject(opponentResponse);
+        return serializeObject(opponentResponse);
     }
 
-    static byte[] createErrorResponse(String errorCode, String errorMessage) {
+    static String createErrorResponse(String errorCode, String errorMessage) {
         Map errorResponse = new HashMap();
         errorResponse.put("erro", errorCode);
         errorResponse.put("mensagem", errorMessage);
-        return encodeObject(errorResponse);
+        return serializeObject(errorResponse);
     }
 
-    static byte[] encodeObject(Map jsonObject) {
-        return JsonUtil.toJson(jsonObject).getBytes(StandardCharsets.UTF_8);
+    static String serializeObject(Map jsonObject) {
+        return JsonUtil.toJson(jsonObject);
     }
 
     private JsonMessages() {}
