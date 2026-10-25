@@ -2,13 +2,13 @@
 
 Estas instruções se aplicam à raiz de `TicTacToeMulticast` e às subpastas, a qualquer agente que desenvolva, revise, documente ou teste o projeto. **Antes de agir, verifique o estado real do repositório e a autorização do responsável.**
 
-## 1. Estado atual: não avançar o projeto sem confirmação
+## 1. Estado atual e autorização vigente
 
-- O projeto está no **item 1 (entendimento e consolidação de decisões)**.
-- **Item 2 não autorizado**. O responsável pediu expressamente para não avançar sem confirmação.
-- Está autorizado **registrar as decisões nos documentos**, como nesta atualização. Isso **não autoriza** escrever código Java, elaborar a implementação, executar/alterar etapas seguintes ou criar testes automatizados.
-- `PLANO_DO_PROJETO.md` foi criado **para registrar o progresso a pedido do responsável**. Sua criação antecipada não significa que o item 6 do planejamento pedagógico tenha sido realizado.
-- Na retomada, confirmar o estado com o responsável antes de prosseguir. Não inferir autorização por ter acesso a arquivos.
+- Em 25/10/2026, nesta conversa, o responsável pediu a implementação do servidor de match, o pareamento dentro de `Main` e o uso do workspace `/home/thiago/Desktop/TicTacToeMulticast`.
+- Em seguida, determinou expressamente usar as decisões já existentes nesta pasta. Elas prevalecem sobre as sugestões do protótipo: **300 s para match**, **120 s durante a partida**, **utilitário JSON próprio (pedido posterior substitui org.json)**, `javac`/`java` e **testes manuais**.
+- A importação do código é autorizada; isso não aprova silenciosamente decisões que este arquivo mantém pendentes. O código importado é uma base para revisão dessas pendências; não representa contrato final de erros/cancelamento/retries/duplicidade.
+- O bloqueio histórico de implementação foi superado para o código de match solicitado nesta conversa. Novos módulos exigem escopo próprio.
+- Não importar Maven, Gson, JUnit ou scripts de testes automatizados. Não alterar as decisões anteriores sem pedido do responsável.
 
 ## 2. Ler antes de alterar qualquer arquivo
 
@@ -33,7 +33,7 @@ Estas instruções se aplicam à raiz de `TicTacToeMulticast` e às subpastas, a
 | JDK informado | Java `17.0.20.1` nas VMs |
 | Interface RMI | `MatchService`, método `getOponent` com entrada e saída **`byte[]`** |
 | Payload | JSON codificado em **UTF-8**; converter bytes para `String` **internamente** para interpretar o JSON |
-| JSON | **`org.json`** (biblioteca externa **expressamente autorizada pelo responsável**) |
+| JSON | **`JsonUtil`**, somente JDK, por pedido posterior do responsável |
 | Tabuleiro | Nove inteiros: `0` vazia, `1` X, `2` O |
 | `Numero` | Contador **global da partida**, `0..8`, apenas jogadas aceitas avançam |
 | Mensagens | JSON de jogada conforme PDF **mais JSON separado de controle** para rejeições/erros/encerramento |
@@ -47,9 +47,9 @@ Estas instruções se aplicam à raiz de `TicTacToeMulticast` e às subpastas, a
 | Interoperabilidade | Entre componentes **do próprio sistema**, sem exigir teste com outros alunos |
 | Testes | **Manuais**, usando programas nos terminais; primeiro `localhost`, depois as VMs |
 
-**Cuidado com `org.json`:** a diretriz inicial era usar somente biblioteca padrão. O responsável **mudou expressamente essa decisão** e selecionou `org.json`. Não proibir `org.json` com base em textos antigos; também não introduzir **outras** bibliotecas, Maven, Gradle ou ferramentas sem aprovação. Artefato/versão do JAR ainda não foram escolhidos. Se o professor exigir aprovação de dependências externas, confirmar antes de implementar.
+**Decisão atual sobre JSON:** em 25/10/2026 o responsável pediu substituir `org.json` por um utilitário próprio. Usar `JsonUtil` e somente o JDK; não reintroduzir bibliotecas externas sem autorização. Esta decisão substitui a aprovação anterior de `org.json`.
 
-**Assinatura RMI conceitual (não implementada):**
+**Assinatura RMI na base importada:**
 
 ```java
 byte[] getOponent(byte[] jsonIn) throws RemoteException;
@@ -78,14 +78,14 @@ A mensagem de jogada usa **exatamente** `Numero`, `Jogada`, `Tabuleiro`, `Result
 - Enquadramento das mensagens TCP e extensão equivalente para UDP (JSON por linha foi **recomendado**, ainda não aprovado como regra final).
 - O timeout de **match é 300 s, já aprovado**; ainda pendentes: formato de resposta/erro no timeout RMI, cancelamento/desistência, retries de RMI e registros duplicados.
 - Se uma rejeição de jogada reinicia o prazo de 120 segundos (a proposta anterior era **não reiniciar**, sem aceite explícito).
-- Versão e obtenção de `org.json`; montagem do classpath sem introduzir ferramenta não autorizada.
 - Número da porta de cada jogador, configuração de `java.rmi.server.hostname`, TTL/interface multicast e limitações das VMs.
 
 Não implementar essas decisões pendentes silenciosamente.
 
 ## 6. Regras de engenharia e falhas
 
-- Java 17, com `java.net`, `java.rmi`, `java.util.concurrent` etc., **mais somente a dependência `org.json` já autorizada**. Não introduzir frameworks ou outras bibliotecas sem autorização.
+- Java 17, com `java.net`, `java.rmi`, `java.util.concurrent` etc., **somente bibliotecas do JDK e o utilitário próprio `JsonUtil`**. Não introduzir frameworks ou outras bibliotecas sem autorização.
+- Por pedido do responsável, não usar notação de generics (parâmetros de tipo ou diamond), lambdas, switch com seta nem futures; usar `final` apenas para constantes nomeadas (exceção aprovada posteriormente); preferir coleções sem parâmetros de tipo com casts explícitos, laços, espera sincronizada e nomes descritivos. A assinatura RMI continua `byte[]`. Ao verificar compilação, usar uma pasta temporária fora do projeto para manter somente fontes em `code/`.
 - Código simples e didático; sem arquitetura sofisticada, abstrações de conveniência ou padrões avançados sem necessidade.
 - **Sem JUnit, Mockito ou testes automatizados.** Testes **manuais** mediante execução dos módulos em terminais. Consultar antes de sugerir ferramentas como `nc` ou `tcpdump`.
 - Cada módulo deve ser executável pelo terminal com parâmetros configuráveis. Primeiro demonstrar `localhost`, depois VMs `152.92.236.14`, `.16`, `.17`.
@@ -112,9 +112,47 @@ Não implementar essas decisões pendentes silenciosamente.
 
 ## 8. Estado atual e próxima ação
 
-- **Item 1:** em consolidação; decisões principais foram tomadas e documentadas.
-- **Item 2:** **bloqueado até confirmação explícita**.
-- **Nenhum Java implementado / teste executado** pelo processo descrito aqui.
-- `PLANO_DO_PROJETO.md`: criado para continuidade documental, não por avanço pedagógico ao item 6.
+- Base Java do match disponível em `code/`; lógica diretamente em `Main.getOponent`.
+- Mantidos os parâmetros e decisões deste repositório, inclusive 300 s de timeout de match e testes manuais.
+- `JsonUtil.java` substitui `org.json`; não há dependências externas nem pasta `lib/`.
+- O código traz do protótipo filas por protocolo, espera com `wait`/`notifyAll`, ordem de chegada, rejeição de duplicidade e erros `erro`/`mensagem`. São detalhes da base importada, sujeitos à consolidação das pendências; não são novos requisitos aprovados do projeto.
+- Roteiros de teste manual em `TESTES_MANUAIS.md`; resultados atuais na seção 9 e quadro consolidado na seção 7 de `PLANO_DO_PROJETO.md`. A seção 10 é histórico org.json; resultados do protótipo Gson não comprovam esta versão. O timeout de 2 s foi validado antes das últimas refatorações; o prazo de 300 s não foi testado.
+- Próxima ação: revisar as pendências do match antes de congelar o contrato; não avançar para jogo/display nem criar testes automatizados.
 
-**Próxima ação permitida:** revisar e registrar dúvidas/decisões técnicas do **item 1** ou aguardar autorização expressa para iniciar **item 2**. Verificar primeiro o estado real do Git antes de qualquer mudança.
+
+## 9. Estilo do responsável e nível de Java
+
+### 9.1. Base da avaliação e orientação didática
+
+Em 25/10/2026, o responsável forneceu um programa de biblioteca (`P3nX`) como referência de como escreve Java e pediu que os agentes adaptassem o código gerado a esse estilo. As correções abaixo e a exceção de `final` para constantes nomeadas foram **aprovadas expressamente pelo responsável nesta conversa**. O exemplo é referência de estilo; não deve ser importado para o projeto nem tratado como especificação funcional do jogo.
+
+**Nível de referência para explicações: fundamentos de Java e orientação a objetos, aproximadamente iniciante a intermediário inicial.** Esta é uma inferência limitada à amostra, não uma avaliação formal nem uma afirmação de que o responsável desconhece outros recursos. O nível de familiaridade não altera a versão do projeto: continua Java 17.
+
+A amostra demonstra uso de tipos e variáveis explícitos, entrada/saída pelo terminal, conversões numéricas, `if`/`else`, laços `while`, `switch` tradicional, métodos auxiliares `private static`, instanciação e uso de objetos, getters, validação e tratamento de exceções padrão e de domínio. Não há evidência suficiente na amostra para avaliar domínio de concorrência, RMI, generics ou programação funcional. As restrições já solicitadas sobre sintaxe são preferências explícitas do projeto, não prova de desconhecimento.
+
+Ao explicar código, partir desses fundamentos. Explicar recursos de rede, sincronização, casts e bibliotecas do JDK usados no projeto, incluindo o que fazem, por que são necessários e como observar o resultado em um teste manual. Preferir explicações passo a passo e construções conhecidas antes de apresentar recursos mais avançados. Não reduzir correção, validação ou fechamento de recursos para simplificar a explicação.
+
+### 9.2. Padrões de escrita adotados
+
+- Preferir fluxo imperativo explícito: `if`/`else`, laços, variáveis declaradas com seus tipos e `switch` com `case`, `break` e `default`, quando couber. Preservar as restrições da seção 6 sobre generics, lambdas, futures e switch com seta.
+- Usar nomes descritivos para classes, métodos, parâmetros e variáveis; classes em PascalCase, métodos e variáveis em camelCase. Preferir nomes que indiquem a ação ou o papel no domínio, evitando abreviações como `b`, `opt` ou `arq` quando escondem o significado. Não renomear campos JSON, métodos RMI ou outros contratos externos por preferência de estilo.
+- Usar métodos auxiliares simples para rotinas identificáveis, como leitura, validação, apresentação e operações do domínio. Métodos `private static` são adequados a rotinas que não dependam do estado de uma instância; não transformar todo o projeto em métodos estáticos.
+- Para entrada textual no terminal, preferir o padrão familiar `BufferedReader` com `InputStreamReader` quando houver necessidade de leitura interativa. Não adicionar menus ou interação a módulos que não precisem disso.
+- Escrever comentários curtos e mensagens de terminal em português, explicando a intenção de cada bloco quando isso ajudar a leitura. Não comentar mecanicamente cada linha nem impor uma renomeação em massa dos identificadores existentes, que já misturam idiomas.
+- Preservar nomes compreensíveis e organização consistente; o recuo irregular do exemplo não é um padrão a reproduzir. Usar o recuo já consistente no projeto.
+- **Permitir `final` somente para constantes nomeadas**, com nomes em MAIUSCULAS_COM_SUBLINHADOS; por exemplo, `final int SAIR = 0;`. Não usar `final` em classes, métodos, parâmetros ou variáveis comuns. Esta exceção substitui a proibição total anterior; ela não exige adicionar constantes a toda operação.
+
+### 9.3. Correções aprovadas para o código gerado
+
+O responsável aprovou as seguintes melhorias em relação à amostra; devem orientar código novo ou alterado dentro do escopo autorizado:
+
+- Usar `boolean` para flags de controle que só precisam de verdadeiro/falso; reservar `Boolean` para situações em que o objeto ou o valor nulo sejam realmente necessários.
+- Tratar entrada numérica inválida (`NumberFormatException`) e fim de entrada (`readLine()` retornando `null`). Definir uma reação explícita conforme o módulo, como pedir correção no terminal ou encerrar a operação; não assumir que `IOException` cobre erros de conversão.
+- Guardar ou usar o resultado de operações que retornam uma nova `String`. Por exemplo, após verificar que a entrada não é nula, usar `opcao = opcao.toLowerCase();` se a normalização for necessária; chamar apenas `opcao.toLowerCase();` não altera `opcao`. A normalização não autoriza aceitar valores fora do contrato de protocolo.
+- Tratar exceções com reação clara e contexto. Preferir os tipos específicos que possam ser tratados naquele ponto. Não criar catches vazios ou um padrão de apenas imprimir uma exceção e continuar sem considerar o estado da operação. Um `catch (Exception ...)` só cabe onde houver uma razão concreta e uma reação definida. Preservar os requisitos existentes de falha e fechamento de recursos.
+- Evitar fall-through acidental no `switch`: terminar cada alternativa com `break`, `return` ou `throw`, conforme necessário. Agrupar casos somente quando a execução compartilhada for intencional e clara.
+- Extrair blocos repetidos e menus profundamente aninhados para métodos auxiliares simples, mantendo o fluxo legível e sem criar uma arquitetura sofisticada. Não copiar a duplicação entre os caminhos de criar e carregar biblioteca do exemplo.
+
+### 9.4. Como resolver futuras dúvidas sobre o estilo
+
+Se outro padrão observado no exemplo parecer incorreto, ambíguo ou contrariar uma instrução vigente, apresentar o trecho, explicar o problema e perguntar ao responsável **antes de promovê-lo a regra para código gerado**. Não transformar erros ocasionais em preferência nem adotar uma correção de estilo contestável silenciosamente. Seguir as regras já aprovadas enquanto a nova decisão estiver pendente. O pedido inicial autorizou a documentação dos padrões; em seguida, o responsável pediu expressamente atualizar o código existente com esses padrões. Essa refatoração está autorizada, preservando o escopo do match e os contratos vigentes.

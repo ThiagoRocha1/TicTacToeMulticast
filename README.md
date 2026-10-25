@@ -2,7 +2,7 @@
 
 Projeto acadêmico de **Sistemas Distribuídos**: jogo da velha distribuído para dois jogadores, com pareamento por **Java RMI**, comunicação direta por **sockets TCP** (e, em uma fase posterior, UDP) e publicação das jogadas para um ou mais **displays multicast**.
 
-> **Estado atual (24/10/2026):** planejamento, **item 1 em consolidação**. Decisões técnicas foram registradas, mas **o item 2 não está autorizado**. Não há implementação Java ou teste manual registrado como executado.
+> **Estado atual (25/10/2026):** base do servidor de match importada para este workspace por pedido do responsável, com pareamento em `Main.getOponent`. Mantidas as decisões anteriores desta pasta: utilitário JSON próprio, timeout de match de **300 s**, prazo de partida de **120 s**, compilação direta e testes manuais. As decisões de protocolo ainda pendentes não foram aprovadas pela importação.
 
 ## Documentação para pessoas e agentes
 
@@ -44,7 +44,7 @@ As portas de escuta dos jogadores ainda não foram fixadas. Primeiro serão feit
 
 A interface remota terá **um método** chamado `getOponent`. A decisão atual é representar a requisição e a resposta como **`byte[]` contendo JSON UTF-8**, e não como `String` diretamente no contrato RMI. A conversão para texto ocorrerá **dentro do componente receptor**, para interpretação do JSON.
 
-**Assinatura acordada, apenas como contrato (não implementada):**
+**Assinatura implementada na base importada:**
 
 ```java
 byte[] getOponent(byte[] jsonIn) throws RemoteException;
@@ -62,9 +62,9 @@ Nome planejado para a interface: `MatchService` (estendendo `java.rmi.Remote`). 
 
 Endereços e portas dos exemplos são **ilustrativos**. O servidor considerará os protocolos `tcp` e `udp` no pareamento, embora **o jogador UDP seja implementado apenas depois da versão TCP**.
 
-### 2. JSON e biblioteca escolhida
+### 2. JSON sem dependências externas
 
-**Escolha expressa do responsável:** utilizar **`org.json`** para interpretar e construir JSON. Trata-se de **dependência externa**, autorizada pelo responsável em substituição à restrição inicial de usar somente bibliotecas do JDK. **Ainda não foi definida a versão do artefato nem como disponibilizar seu JAR**; não adicionar Maven/Gradle ou outras dependências por conta própria. Caso a disciplina exija aprovação adicional do professor para bibliotecas externas, confirmar antes da implementação.
+**Decisão atual do responsável (25/10/2026):** substituir `org.json` por `JsonUtil`, implementado com o JDK. Não há JAR para baixar nem pasta `lib/`. `JsonUtil.parseJson` lê objetos como `Map`, arrays como `List`, números como `BigDecimal`, além de strings, booleanos e `null`; `toJson` faz a conversão inversa. Chaves duplicadas, JSON malformado e aninhamento acima de 32 níveis são rejeitados. `JsonMessages` mantém o limite de entrada de 16384 bytes, valida UTF-8 e os campos do match. A decisão anterior de usar a biblioteca foi substituída por este pedido.
 
 Serialização proposta/aprovada no transporte: JSON como texto codificado em **UTF-8**, transmitido em `byte[]`. O contrato de enquadramento das mensagens nos sockets (por exemplo, JSON por linha no TCP) **ainda precisa ser consolidado** antes de implementar.
 
@@ -120,7 +120,7 @@ O responsável definiu que a interoperabilidade será verificada **entre os comp
 
 ## Restrições de trabalho e avaliação
 
-- **Nenhuma implementação Java antes de autorização explícita**; respeitar o progresso item a item. O item 2 continua bloqueado.
+- A base do servidor de match foi solicitada nesta conversa. Isso não autoriza antecipar os demais módulos ou fechar as pendências de protocolo sem consolidação.
 - Preferir a solução mais simples e direta, sem frameworks e sem abstrações desnecessárias.
 - Testes **exclusivamente manuais** executando servidor, jogadores e displays em terminais. Sem JUnit/Mockito ou testes automatizados.
 - Para cada falha prevista, registrar **o que pode falhar**, **a reação esperada** e **como reproduzir/testar manualmente**.
@@ -135,7 +135,44 @@ O responsável definiu que a interoperabilidade será verificada **entre os comp
 | Item 1 — entendimento, decisões e dúvidas | **Em consolidação; decisões atualizadas** |
 | Item 2 — funcionamento explicado ponta a ponta | **Aguardando confirmação explícita** |
 | Arquitetura detalhada e classes | **Não iniciado** |
-| Java, integração e testes | **Não iniciado / não executado** |
+| Java do match | **Base importada, sujeita à revisão das pendências** |
+| Integração e testes | Resultados atuais na seção 9 e quadro da seção 7 de `PLANO_DO_PROJETO.md`; comandos em `TESTES_MANUAIS.md` |
 | `PLANO_DO_PROJETO.md` | **Registro de acompanhamento criado antecipadamente a pedido do responsável; isso não inicia o item 6** |
 
 Leia [`PLANO_DO_PROJETO.md`](PLANO_DO_PROJETO.md) para pendências e **BLOCO DE RETOMADA**. Toda nova decisão deve atualizar os três documentos quando afetar suas instruções. Não confundir criação de documentação com execução de testes ou finalização de etapas.
+
+## Base Java importada em 25/10/2026
+
+O método `Main.getOponent` mantém a lógica de match na classe principal, conforme solicitado. `MatchService` é a interface remota; `JsonMessages` converte bytes UTF-8 e interpreta JSON via `JsonUtil`. Não há classe separada `MatchServer`. `PendingMatchRequest` guarda jogador, prazo e resposta; a espera usa `wait`/`notifyAll`, sob um único monitor. Não são usadas lambdas, futures de arrays nem notação de generics; `final` é permitido somente para constantes nomeadas, conforme a seção 9 de `AGENTS.md`. As coleções usam casts explícitos; por isso o compilador pode informar operações unchecked.
+
+A compilação e a execução exigem somente o JDK 17. Os comandos usam `/tmp/tictactoe-classes` para manter apenas fontes em `code/`; após reiniciar a máquina ou limpar `/tmp`, recompilar. As rotinas de servidor, cliente e JSON foram separadas em métodos simples, com constantes nomeadas e erros de configuração explícitos em português.
+
+Compilar com JDK 17 ou superior:
+
+```bash
+mkdir -p /tmp/tictactoe-classes
+javac -encoding UTF-8 -d /tmp/tictactoe-classes code/*.java
+```
+
+Servidor local (terminal 1):
+
+```bash
+RMI_HOST=127.0.0.1 RMI_REGISTRY_PORT=1099 RMI_OBJECT_PORT=5021 RMI_SERVICE_NAME=MatchServiceLocal \
+  java -cp /tmp/tictactoe-classes Main server
+```
+
+Cliente de diagnóstico (terminal 2):
+
+```bash
+RMI_HOST=127.0.0.1 RMI_REGISTRY_PORT=1099 RMI_SERVICE_NAME=MatchServiceLocal \
+  PLAYER_IP=127.0.0.1 PLAYER_PORT=5010 PLAYER_PROTOCOL=tcp \
+  java -cp /tmp/tictactoe-classes Main client
+```
+
+No terminal 3, repetir o cliente com `PLAYER_PORT=5011`. Ambos recebem o endpoint do oponente. O cliente é só de diagnóstico; não abre socket de jogadas.
+
+O código importa detalhes do protótipo — filas por protocolo, `wait`/`notifyAll`, ordem de chegada, primeiro inicia, rejeição de duplicidade e JSON de erro com `erro`/`mensagem`. Esses detalhes devem ser revisados contra as pendências anteriores, e não tratados como contrato final já aprovado nesta pasta. Cancelamento explícito e retries não estão implementados.
+
+`MATCH_TIMEOUT_SECONDS` tem padrão **300**, conforme a decisão anterior desta pasta. Testes podem reduzir esse parâmetro temporariamente. IP/portas são configuráveis; os padrões de VM permanecem `.14`, Registry `9821` e serviço `MatchService21`. A porta definitiva do objeto remoto nas VMs está pendente (`RMI_OBJECT_PORT` é obrigatório). Os valores locais `1099`/`5021` são exemplos. O prazo de 120 s durante a partida não é implementado por esta base do match.
+
+Os roteiros completos, incluindo teste com outro IP e portas, estão em `TESTES_MANUAIS.md`. Não foram importados Maven, Gradle, Gson, JUnit ou scripts de testes automatizados.
