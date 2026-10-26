@@ -8,6 +8,7 @@ import java.net.StandardSocketOptions;
 import java.nio.ByteBuffer;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.Map;
 
 public class Display implements AutoCloseable {
@@ -81,11 +82,14 @@ public class Display implements AutoCloseable {
         }
     }
 
-    void publishMove(Map moveMessage) {
+    void publishMove(String sessionIdentifier, Map moveMessage) {
         if (multicastSocket == null || multicastSocket.isClosed()) {
             return;
         }
-        byte[] messageBytes = JsonUtil.toJson(moveMessage).getBytes(StandardCharsets.UTF_8);
+        Map displayMessage = new HashMap();
+        displayMessage.put("partidaId", sessionIdentifier);
+        displayMessage.put("jogada", moveMessage);
+        byte[] messageBytes = JsonUtil.toJson(displayMessage).getBytes(StandardCharsets.UTF_8);
         if (messageBytes.length > MAX_DATAGRAM_BYTES) {
             System.err.println("Jogada não publicada: mensagem multicast excede 16384 bytes");
             return;
@@ -153,9 +157,15 @@ public class Display implements AutoCloseable {
             while (true) {
                 DatagramPacket packet = channel.receivePacket();
                 try {
-                    Map moveMessage = Display.readPacket(packet);
+                    Map displayMessage = Display.readPacket(packet);
+                    String sessionIdentifier = GameMessages.readText(displayMessage, "partidaId");
+                    Object moveValue = displayMessage.get("jogada");
+                    if (!(moveValue instanceof Map)) {
+                        throw new IllegalArgumentException("Campo objeto obrigatório: jogada");
+                    }
+                    Map moveMessage = (Map) moveValue;
                     int[] boardValues = GameMessages.readDisplayBoard(moveMessage);
-                    showMove(moveMessage, boardValues, packet.getAddress().getHostAddress());
+                    showMove(sessionIdentifier, moveMessage, boardValues, packet.getAddress().getHostAddress());
                 } catch (IllegalArgumentException invalidMessage) {
                     System.err.println("Datagrama descartado: " + invalidMessage.getMessage());
                 } catch (IOException invalidEncoding) {
@@ -171,7 +181,9 @@ public class Display implements AutoCloseable {
         }
     }
 
-    private static void showMove(Map moveMessage, int[] boardValues, String sourceAddress) {
+    private static void showMove(String sessionIdentifier, Map moveMessage, int[] boardValues, String sourceAddress) {
+        System.out.println();
+        System.out.println("Partida: " + sessionIdentifier);
         System.out.println("Jogada " + moveMessage.get("Numero") + ", casa " + moveMessage.get("Jogada")
                 + " (publicada por " + sourceAddress + ")");
         for (int row = 0; row < 3; row++) {

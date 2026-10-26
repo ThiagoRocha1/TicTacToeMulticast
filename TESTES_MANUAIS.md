@@ -632,3 +632,44 @@ Esperado no terminal1: Registry iniciado. No terminal2: Jogador escutando em127.
 6. Nas VMs, recompilar em ~/tictactoe com `javac -encoding UTF-8 *.java`, retirar PLAYER_IP/PLAYER_PORT do .env e executar `unset PLAYER_IP PLAYER_PORT` seguido de `source ~/.bashrc` em cada terminal existente. Iniciar MatchServer na .14 e Player nas .16/.17. Esperado: IP local de cada VM, porta atribuída e partida completa. Se o match funcionar mas TCP falhar, verificar alcance do endereço/porta e regras da rede; porta automática não abre firewall. VMs: não executado.
 
 Resultado local real: compilação e passos2–4 passaram; portas37465/40295, vitóriaX, saída0 de ambos. Não foi executado receptor Display nesta verificação; multicast usou lo/TTL0. Processos encerrados.
+
+## Caso 21 — ID da partida antes do tabuleiro no Display
+
+Objetivo: identificar cada snapshot pelo UUID compartilhado pelos jogadores, preservando a jogada TCP. Pré-requisitos: JDK17, quatro terminais na raiz do projeto, fontes novos nos jogadores e Display; portas1199/5121 livres. Roteiros17–19 que injetam datagramas sem envelope são históricos: o formato novo exige partidaId e jogada.
+
+1. Compilar:
+
+```bash
+mkdir -p /tmp/tictactoe-display-id
+javac -encoding UTF-8 -d /tmp/tictactoe-display-id code/*.java
+```
+
+2. Terminal1:
+
+```bash
+RMI_HOST=127.0.0.1 RMI_REGISTRY_PORT=1199 RMI_OBJECT_PORT=5121 RMI_SERVICE_NAME=MatchDisplayId java -cp /tmp/tictactoe-display-id MatchServer
+```
+
+Esperado: Registry iniciado com o serviço indicado.
+
+3. Terminal2:
+
+```bash
+MULTICAST_INTERFACE=lo MULTICAST_TTL=0 java -cp /tmp/tictactoe-display-id Display
+```
+
+Esperado: escutando225.1.1.21:8821 pela interface lo.
+
+4. Terminais3 e4, nesta ordem, executar:
+
+```bash
+env -u PLAYER_IP -u PLAYER_PORT RMI_HOST=127.0.0.1 RMI_REGISTRY_PORT=1199 RMI_SERVICE_NAME=MatchDisplayId MULTICAST_INTERFACE=lo MULTICAST_TTL=0 java -cp /tmp/tictactoe-display-id Player
+```
+
+Esperado: portas atribuídas automaticamente, mesmo ID nos dois jogadores; terminal3=X, terminal4=O. Alternar entradas3=0,4=3,3=1,4=4,3=2. Display deve mostrar `Partida: UUID` antes de cada snapshot, sempre com o mesmo UUID desta partida, jogadas0..4 e vitóriaX. Jogadores: vitória/derrota e saída0. Sinais de falha: ID ausente/diferente dos jogadores ou datagramas válidos descartados. Encerrar Display/servidor com Ctrl+C.
+
+5. Para verificar jogos simultâneos, manter servidor/Display e abrir quatro jogadores com o comando do passo4 em quatro terminais: esperar o primeiro par conectar antes de iniciar o segundo. Alternar jogadas nos dois pares. Esperado: cada atualização identificada pelo ID do par correto, mesmo com snapshots intercalados. Não há menu nem separação fixa na tela. Este cenário não foi executado nesta alteração.
+
+6. Para provocar incompatibilidade de formato, executar um publicador compilado da versão anterior (sem envelope) contra o Display novo, em ambiente local separado: esperado aviso de datagrama descartado, sem encerrar receptor. Não misturar versões nas VMs. Este cenário e envelopes com tipos inválidos não foram executados nesta alteração.
+
+Resultado real: compilação e passos2–4 passaram em localhost, cinco snapshots com o mesmo UUID e vitóriaX. Todos os processos encerrados. VMs e passos5–6 não executados.

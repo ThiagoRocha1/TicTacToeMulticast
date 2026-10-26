@@ -151,7 +151,7 @@ class TcpGameSession {
             }
             gameRules = candidateRules;
             if (displayPublisher != null) {
-                displayPublisher.publishMove(message);
+                displayPublisher.publishMove(sessionIdentifier, message);
             }
             showBoard();
             if (gameRules.isGameOver()) {
@@ -289,6 +289,7 @@ class TcpGameSession {
     }
 
     private void showBoard() {
+        System.out.println();
         int[] board = gameRules.getBoardCopy();
         for (int row = 0; row < 3; row++) {
             String line = "";
