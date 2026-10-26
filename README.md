@@ -150,15 +150,15 @@ RMI_HOST=127.0.0.1 RMI_REGISTRY_PORT=1099 RMI_OBJECT_PORT=5021 RMI_SERVICE_NAME=
   java -cp /tmp/tictactoe-classes MatchServer
 ```
 
-Jogador — busca de oponente, sem partida ainda (terminal 2):
+Jogador — busca de oponente e partida TCP (terminal 2):
 
 ```bash
 RMI_HOST=127.0.0.1 RMI_REGISTRY_PORT=1099 RMI_SERVICE_NAME=MatchServiceLocal \
-  PLAYER_IP=127.0.0.1 PLAYER_PORT=5010 PLAYER_PROTOCOL=tcp \
+  MULTICAST_INTERFACE=lo MULTICAST_TTL=0 \
   java -cp /tmp/tictactoe-classes Player
 ```
 
-No terminal 3, repetir o cliente com `PLAYER_PORT=5011`. Ambos recebem o endpoint do oponente. O cliente é só de diagnóstico; não abre socket de jogadas. Ele valida a resposta JSON e mostra endpoint/iniciador no sucesso; erros aparecem com código e explicação em português, saída 1 e sem nova tentativa automática.
+No terminal 3, repetir o mesmo comando. Cada jogador reserva uma porta automaticamente, informa seu endpoint ao match e inicia a partida após o pareamento. Erros aparecem com explicação em português, saída 1 e sem nova tentativa automática.
 
 As políticas de fila, ordem de início, duplicidade e erros foram aprovadas pelo responsável em 25/10/2026 conforme o contrato acima. A implementação usa `wait`/`notifyAll`. Cancelamento imediato e novas tentativas automáticas não fazem parte desta versão; o pedido de cliente encerrado pode permanecer elegível para pareamento até expirar.
 
@@ -188,7 +188,7 @@ Compilação e verificação manual: caso 13 de `TESTES_MANUAIS.md`.
 
 O responsável confirmou expressamente a proposta TCP nesta conversa. São escolhas do projeto, complementares ao PDF:
 
-- Ambos reservam PLAYER_IP:PLAYER_PORT antes de chamar RMI. Quem recebe inicia=true conecta e usa X; o outro aceita e usa O. Aceite/conexão limitados a 120 s, sem reconexão automática. O IP da conexão aceita deve coincidir com o adversário retornado pelo match.
+- Ambos reservam o endereço TCP antes de chamar RMI. Por pedido posterior do responsável, PLAYER_IP e PLAYER_PORT são opcionais: sem eles, Player obtém o IP local de uma conexão TCP ao Registry e reserva uma porta livre com bind na porta 0; anuncia a porta real, mantendo a escuta aberta. Overrides manuais continuam disponíveis (PLAYER_PORT=0 também seleciona automaticamente). Quem recebe inicia=true conecta e usa X; o outro aceita e usa O. Aceite/conexão limitados a 120 s, sem reconexão automática. O IP da conexão aceita deve coincidir com o adversário retornado pelo match.
 - UTF-8, um objeto JSON por linha, no máximo 16384 unidades UTF-16 por mensagem. Codificação inválida, JSON ilegível ou mensagem excessiva encerram por erro; jogada legível com dados inválidos recebe rejeição e pode ser corrigida. A leitura usa um prazo absoluto, inclusive durante mensagens incompletas.
 - O iniciador gera um UUID e envia `{"evento":"inicio","partidaId":"UUID"}` antes da primeira jogada. O JSON RMI permanece inalterado.
 - Jogadas usam exatamente Numero, Jogada, Tabuleiro, Resultado. Numero é o índice global antes de aplicar a jogada; Tabuleiro é posterior à jogada; Resultado é do emissor. Esta implementação envia jog, vit ou emp; der permanece reservado no vocabulário do professor, mas não representa uma jogada válida própria neste fluxo.
@@ -203,7 +203,7 @@ Na pasta única ~/tictactoe da VM .14: MatchServer.java, MatchService.java, Json
 
 Na pasta ~/tictactoe de cada VM jogadora (.16 e .17): Player.java, MatchService.java, JsonMessages.java, JsonUtil.java, TicTacToeRules.java, GameMessages.java, TcpGameSession.java, Display.java e a configuração .env daquele jogador. Display.java pode ficar na mesma pasta e executar em outro terminal de cada jogador.
 
-Recompilar com `javac -encoding UTF-8 *.java` em cada máquina. Iniciar `java -cp . MatchServer` na .14 e depois `java -cp . Player` na .16 e .17. PLAYER_IP deve ser local à própria VM e PLAYER_PORT deve estar disponível/acessível ao adversário. Roteiro completo e resultados esperados no caso 14 de TESTES_MANUAIS.md. Não executar processos antigos com arquivos novos.
+Recompilar com `javac -encoding UTF-8 *.java` em cada máquina. Iniciar `java -cp . MatchServer` na .14 e depois `java -cp . Player` na .16 e .17. PLAYER_IP e PLAYER_PORT não são obrigatórios; a descoberta usa a rota até o Registry e uma porta atribuída pelo Linux. O adversário precisa conseguir alcançar esse IP e a porta atribuída. Em redes com NAT, múltiplas rotas ou firewall restritivo, a descoberta não garante conectividade; os overrides permitem selecionar endereço local e porta fixa. Roteiro completo e resultados esperados no caso 14 de TESTES_MANUAIS.md. Não executar processos antigos com arquivos novos.
 
 Por decisão mais recente do responsável, TcpGameSession permanece em code/TcpGameSession.java, separado de Player.java. Distribuir ambos aos jogadores e compilar juntos com os demais fontes; executar Player normalmente.
 
@@ -227,3 +227,24 @@ No Player, configuração/envio multicast com falha gera aviso e desativa a publ
 Para uma máquina apenas de display, em ~/tictactoe: Display.java, GameMessages.java, TicTacToeRules.java, JsonUtil.java e .env com a interface local. O display não precisa de MatchServer, Player nem RMI.
 
 Nas VMs jogadoras, acrescentar ao .env `MULTICAST_INTERFACE` com o nome real da interface da própria VM e `MULTICAST_TTL` apropriado à rede (1 é um ponto inicial, não comprova roteamento entre VMs). Preservar grupo225.1.1.21 e porta8821. Recompilar com `javac -encoding UTF-8 *.java`, recarregar o ambiente e executar `java -cp . Display` em terminal separado. Iniciar displays antes dos jogadores para acompanhar a partida completa. Roteiros locais completos: casos17/18 de TESTES_MANUAIS.md.
+
+## Descoberta automática do endereço do jogador
+
+Pedido do responsável: iniciar sem configurar IP/porta de cada jogador. Player abre uma conexão TCP curta ao Registry para obter o IP local escolhido pelo sistema, fecha essa conexão e reserva a escuta TCP na porta 0. getLocalPort informa a porta real, enviada no JSON RMI existente. Não há varredura de portas nem alteração do contrato de match. Sem Registry acessível, a descoberta falha com mensagem contextual; não há registro/retry automático.
+
+Nas VMs .16 e .17, o mesmo conteúdo pode ser usado em ~/tictactoe/.env:
+
+```bash
+RMI_HOST=152.92.236.14
+RMI_REGISTRY_PORT=9821
+RMI_SERVICE_NAME=MatchService21
+PLAYER_PROTOCOL=tcp
+MULTICAST_GROUP=225.1.1.21
+MULTICAST_PORT=8821
+MULTICAST_INTERFACE=enX0
+MULTICAST_TTL=1
+```
+
+Remover PLAYER_IP e PLAYER_PORT antigos do .env e executar `unset PLAYER_IP PLAYER_PORT` nos terminais já abertos antes de `source ~/.bashrc`; apagar uma linha do arquivo não remove variáveis já exportadas. O carregamento/exportação do .env continua feito pelo bashrc, não pelo Java. VM .14 mantém a configuração de MatchServer, sem mudança. A interface multicast continua explícita e independente da descoberta TCP. Não são criadas regras de firewall automaticamente.
+
+Teste manual e falhas: caso 20 de TESTES_MANUAIS.md. Compilação e uma partida local com descoberta passaram; validação nas VMs ainda não executada.

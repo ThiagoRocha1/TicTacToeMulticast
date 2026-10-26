@@ -599,3 +599,36 @@ ls code
 Esperado: nove fontes, métodos multicast na classe Display; nenhum MulticastChannel.java. Compilação passou com avisos unchecked esperados. Sinais de falha: classe ausente ou dependência do fonte removido. Para provocar falha de distribuição, omitir Display.java numa pasta temporária de implantação limpa e compilar os fontes do jogador: TcpGameSession deve acusar a classe ausente. Não remover fontes do workspace.
 
 2. Repetir casos17/18 com classpath /tmp/tictactoe-display-methods para partidas completas. **Partidas completas não reexecutadas nesta reorganização.** Uma verificação manual via JShell chamou Display.openPublisher, publishMove e close por reflexão e um processo Display separado recebeu/exibiu o snapshot X0 em lo/TTL0: **passou**. Os comandos de inicialização e as variáveis de ambiente dos casos17/18 permanecem válidos.
+
+## Caso 20 — descoberta automática de IP e porta
+
+Objetivo: reservar e anunciar o endpoint real sem PLAYER_IP/PLAYER_PORT. Pré-requisitos: JDK17 no PATH, fontes atuais, três terminais no projeto; portas1199/5121 livres. Estes comandos são para execução manual.
+
+1. Compilar:
+
+```bash
+mkdir -p /tmp/tictactoe-discovery
+javac -encoding UTF-8 -d /tmp/tictactoe-discovery code/*.java
+```
+
+2. Terminal1, iniciar o servidor:
+
+```bash
+RMI_HOST=127.0.0.1 RMI_REGISTRY_PORT=1199 RMI_OBJECT_PORT=5121 RMI_SERVICE_NAME=MatchDiscovery java -cp /tmp/tictactoe-discovery MatchServer
+```
+
+3. Terminal2, e depois terminal3, executar o mesmo comando:
+
+```bash
+env -u PLAYER_IP -u PLAYER_PORT RMI_HOST=127.0.0.1 RMI_REGISTRY_PORT=1199 RMI_SERVICE_NAME=MatchDiscovery MULTICAST_INTERFACE=lo MULTICAST_TTL=0 java -cp /tmp/tictactoe-discovery Player
+```
+
+Esperado no terminal1: Registry iniciado. No terminal2: Jogador escutando em127.0.0.1 e uma porta não zero, buscando adversário; após terminal3, conexão como X. Terminal3: outra porta não zero, conexão como O. Não exigir números específicos de porta.
+
+4. Alternar entradas: terminal2=0, terminal3=3, terminal2=1, terminal3=4, terminal2=2. Esperado: vitória no terminal2, derrota no terminal3, ambos encerram normalmente. Encerrar servidor com Ctrl+C após concluir. Sinais de falha: porta anunciada0, endpoint errado, erro de bind ou falta de conexão entre jogadores.
+
+5. Para provocar falha de descoberta, com servidor desligado repetir comando do passo3: esperado erro contextual de descoberta pelo Registry, saída1, sem pedido de match. Para verificar override, reiniciar servidor e repetir passo3 usando PLAYER_IP=127.0.0.1 PLAYER_PORT=5010 no lugar de `-u PLAYER_IP -u PLAYER_PORT` em um terminal e porta5011 no outro. Esperado: portas configuradas anunciadas e partida normal. Para provocar erro de porta, usar PLAYER_PORT=abc: esperado configuração inválida e saída1 antes do registro. Esses cenários de falha/override não foram executados nesta alteração.
+
+6. Nas VMs, recompilar em ~/tictactoe com `javac -encoding UTF-8 *.java`, retirar PLAYER_IP/PLAYER_PORT do .env e executar `unset PLAYER_IP PLAYER_PORT` seguido de `source ~/.bashrc` em cada terminal existente. Iniciar MatchServer na .14 e Player nas .16/.17. Esperado: IP local de cada VM, porta atribuída e partida completa. Se o match funcionar mas TCP falhar, verificar alcance do endereço/porta e regras da rede; porta automática não abre firewall. VMs: não executado.
+
+Resultado local real: compilação e passos2–4 passaram; portas37465/40295, vitóriaX, saída0 de ambos. Não foi executado receptor Display nesta verificação; multicast usou lo/TTL0. Processos encerrados.

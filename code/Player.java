@@ -43,19 +43,23 @@ public class Player {
 
     private static void requestOpponent(String serverHost, int registryPort, String serviceName)
             throws IOException, NotBoundException {
-        Map playerRequest = new HashMap();
-        playerRequest.put("ip", readEnvironmentVariable("PLAYER_IP", null));
-        playerRequest.put("porta", readPort("PLAYER_PORT", null));
-        playerRequest.put("protocolo", readEnvironmentVariable("PLAYER_PROTOCOL", "tcp"));
-        String requestJson = JsonMessages.serializeObject(playerRequest);
-
-        JsonMessages.PlayerRegistration registration = JsonMessages.readPlayerRequest(requestJson);
-        if (!registration.getProtocol().equals("tcp")) {
+        String playerProtocol = readEnvironmentVariable("PLAYER_PROTOCOL", "tcp");
+        if (!playerProtocol.equalsIgnoreCase("tcp")) {
             throw new IllegalArgumentException("O jogador implementa somente TCP nesta etapa");
         }
+        int playerPort = readPlayerPort();
+        InetAddress playerAddress = discoverPlayerAddress(serverHost, registryPort);
         try (ServerSocket listeningSocket = new ServerSocket()) {
-            listeningSocket.bind(new InetSocketAddress(registration.getIpAddress(), registration.getPortNumber()));
+            listeningSocket.bind(new InetSocketAddress(playerAddress, playerPort));
             listeningSocket.setSoTimeout(CONNECTION_TIMEOUT_MILLIS);
+            Map playerRequest = new HashMap();
+            playerRequest.put("ip", playerAddress.getHostAddress());
+            playerRequest.put("porta", listeningSocket.getLocalPort());
+            playerRequest.put("protocolo", playerProtocol);
+            String requestJson = JsonMessages.serializeObject(playerRequest);
+            JsonMessages.readPlayerRequest(requestJson);
+            System.out.println("Jogador escutando em " + playerAddress.getHostAddress()
+                    + ":" + listeningSocket.getLocalPort());
             Registry matchRegistry = LocateRegistry.getRegistry(serverHost, registryPort);
             MatchService matchService = (MatchService) matchRegistry.lookup(serviceName);
             System.out.println("Buscando adversário por RMI...");
@@ -80,6 +84,28 @@ public class Player {
                 gameSession.play(startsMatch);
             }
         }
+    }
+
+    private static InetAddress discoverPlayerAddress(String serverHost, int registryPort) throws IOException {
+        String configuredAddress = readEnvironmentVariable("PLAYER_IP", "");
+        if (!configuredAddress.isBlank()) {
+            return InetAddress.getByName(configuredAddress);
+        }
+        try (Socket discoverySocket = new Socket()) {
+            discoverySocket.connect(new InetSocketAddress(serverHost, registryPort), CONNECTION_TIMEOUT_MILLIS);
+            return discoverySocket.getLocalAddress();
+        } catch (IOException discoveryFailure) {
+            throw new IOException("Não foi possível descobrir o IP local pelo Registry em "
+                    + serverHost + ":" + registryPort + ": " + discoveryFailure.getMessage(), discoveryFailure);
+        }
+    }
+
+    private static int readPlayerPort() {
+        String configuredPort = readEnvironmentVariable("PLAYER_PORT", "0");
+        if (configuredPort.equals("0")) {
+            return 0;
+        }
+        return readPort("PLAYER_PORT", "0");
     }
 
     private static Socket openOpponentConnection(ServerSocket listeningSocket, String opponentAddress,

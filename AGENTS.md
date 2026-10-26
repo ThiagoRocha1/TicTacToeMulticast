@@ -95,7 +95,7 @@ As decisões de partida TCP anteriormente listadas foram aprovadas expressamente
 
 O responsável confirmou expressamente a proposta TCP nesta conversa. São escolhas do projeto, complementares ao PDF:
 
-- Ambos reservam PLAYER_IP:PLAYER_PORT antes de chamar RMI. Quem recebe inicia=true conecta e usa X; o outro aceita e usa O. Aceite/conexão limitados a 120 s, sem reconexão automática. O IP da conexão aceita deve coincidir com o adversário retornado pelo match.
+- Ambos reservam o endereço TCP antes de chamar RMI. Por pedido posterior do responsável, PLAYER_IP e PLAYER_PORT são opcionais: sem eles, Player obtém o IP local de uma conexão TCP ao Registry e reserva uma porta livre com bind na porta 0; anuncia a porta real, mantendo a escuta aberta. Overrides manuais continuam disponíveis (PLAYER_PORT=0 também seleciona automaticamente). Quem recebe inicia=true conecta e usa X; o outro aceita e usa O. Aceite/conexão limitados a 120 s, sem reconexão automática. O IP da conexão aceita deve coincidir com o adversário retornado pelo match.
 - UTF-8, um objeto JSON por linha, no máximo 16384 unidades UTF-16 por mensagem. Codificação inválida, JSON ilegível ou mensagem excessiva encerram por erro; jogada legível com dados inválidos recebe rejeição e pode ser corrigida. A leitura usa um prazo absoluto, inclusive durante mensagens incompletas.
 - O iniciador gera um UUID e envia `{"evento":"inicio","partidaId":"UUID"}` antes da primeira jogada. O JSON RMI permanece inalterado.
 - Jogadas usam exatamente Numero, Jogada, Tabuleiro, Resultado. Numero é o índice global antes de aplicar a jogada; Tabuleiro é posterior à jogada; Resultado é do emissor. Esta implementação envia jog, vit ou emp; der permanece reservado no vocabulário do professor, mas não representa uma jogada válida própria neste fluxo.
@@ -198,3 +198,7 @@ O responsável aprovou as seguintes melhorias em relação à amostra; devem ori
 ### 9.4. Como resolver futuras dúvidas sobre o estilo
 
 Se outro padrão observado no exemplo parecer incorreto, ambíguo ou contrariar uma instrução vigente, apresentar o trecho, explicar o problema e perguntar ao responsável **antes de promovê-lo a regra para código gerado**. Não transformar erros ocasionais em preferência nem adotar uma correção de estilo contestável silenciosamente. Seguir as regras já aprovadas enquanto a nova decisão estiver pendente. O pedido inicial autorizou a documentação dos padrões; em seguida, o responsável pediu expressamente atualizar o código existente com esses padrões. Essa refatoração está autorizada, preservando o escopo do match e os contratos vigentes.
+
+## Descoberta de endpoint aprovada posteriormente
+
+O responsável pediu dispensar a configuração manual de IP/porta do jogador. Player usa o IP local de uma conexão TCP ao Registry e bind TCP na porta 0; informa a porta atribuída ao match, mantendo o socket reservado. PLAYER_IP/PLAYER_PORT opcionais preservam testes e redes com porta fixa; 0 seleciona porta automática. Não alterar a assinatura/JSON RMI. MULTICAST_INTERFACE continua explícita (enX0 informado para as três VMs). Descoberta não configura firewall/NAT nem comprova alcance entre jogadores. Caso20 manual; localhost passou, VMs pendentes.
