@@ -268,3 +268,7 @@ Por pedido do responsável, ServerShutdown foi removida. MatchServer implementa 
 Player usa InetAddress.getLocalHost() quando PLAYER_IP está ausente. Reserva a porta com new ServerSocket(localPlayerRequestedPort), sendo 0 o padrão; getLocalPort() informa a porta real. A escuta aceita conexões nas interfaces locais. O socket de saída é associado ao IP anunciado antes de connect, preservando a validação do IP do adversário e o timeout120s. RMI continua responsável pelo pareamento.
 
 getLocalHost() depende da resolução do nome da máquina: pode retornar127.0.1.1, que serve somente para testes na mesma máquina. Nas VMs, conferir o IP exibido antes do teste remoto; corrigir a resolução do nome ou usar PLAYER_IP com endereço alcançável se necessário. Porta automática e PLAYER_PORT opcional preservados. Caso23 em TESTES_MANUAIS.md registra o teste desta alteração; evidências antigas de descoberta por rota são históricas.
+
+## Roteiro de gravação por comunicação e falhas
+
+[ROTEIRO_DO_VIDEO.md](ROTEIRO_DO_VIDEO.md) organiza aproximadamente10 minutos em seis clipes, com conteúdo de cinco slides, fala-base e pontos do código para RMI, TCP e multicast. Inclui matriz de falhas, cenas de demonstração e limites da implementação. É material de preparação; não representa vídeo gravado nem execução de novos testes.

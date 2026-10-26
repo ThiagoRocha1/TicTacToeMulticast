@@ -2,6 +2,8 @@
 
 Preparado em 26/10/2026 a partir dos nove fontes Java do repositório. O guia explica a implementação atual; não substitui o enunciado nem transforma decisões do projeto em requisitos do professor.
 
+**Roteiro para gravação em partes:** consulte [ROTEIRO_DO_VIDEO.md](ROTEIRO_DO_VIDEO.md), com seis minivídeos, cinco propostas de slides, fala-base, trechos de código e demonstrações focadas nas falhas.
+
 **Como usar:** leia as seções 1–5 para entender o sistema; use a seção 6 como roteiro de um vídeo de aproximadamente 10 minutos. A seção 7 contém uma demonstração com comandos. A seção 8 ajuda a responder perguntas.
 
 ## 1. O sistema em uma frase
@@ -439,7 +441,7 @@ Esperado: escuta no grupo pela interface lo. Opcionalmente repetir em outro term
 env -u PLAYER_IP -u PLAYER_PORT RMI_HOST=127.0.0.1 RMI_REGISTRY_PORT=1199 RMI_SERVICE_NAME=MatchVideo PLAYER_PROTOCOL=tcp MULTICAST_GROUP=225.1.1.21 MULTICAST_PORT=8821 MULTICAST_INTERFACE=lo MULTICAST_TTL=0 java -cp /tmp/tictactoe-video Player
 ```
 
-Esperado: IP127.0.0.1, uma porta atribuída e espera por adversário.
+Esperado: IP resolvido pelo hostname (pode ser127.0.1.1 neste teste local), uma porta atribuída e espera por adversário.
 
 5. Terminal4 — repetir exatamente o comando do passo4, antes de300s. Esperado: primeiro jogador=X, segundo=O, mesmo UUID nos dois.
 

@@ -209,6 +209,10 @@ As escolhas TCP propostas foram aprovadas expressamente: iniciador conecta/X, ou
 
 ## 9. Última mudança registrada
 
+**26/10/2026 — revisão do roteiro de gravação:** retirado clipe7 e redistribuídos10min em seis partes. Parte5 ampliada com arquivos, métodos, linhas conferidas e fala correspondente ao tratamento de falhas. Parte6 inclui comandos completos e sequências de vitória X, vitória O e empate, tabuleiros finais e resultados por terminal; sem novas partidas executadas nesta revisão. Incluídas orientações de edição no Canva, identificação de capítulos/terminais, destaques e transições. Fontes Java inalterados; guia e README sincronizados.
+
+**26/10/2026 — roteiro de apresentação solicitado:** criado ROTEIRO_DO_VIDEO.md com sete clipes totalizando10 minutos, seis propostas de slides, fala-base, navegação por métodos, matriz falha/detecção/reação/limite e cenas de demonstração. Foco em RMI, TCP e multicast; distingue continuidade sem Display de encerramento por falha do oponente. Guia e README vinculados. Código inalterado, sem novos testes ou gravação; validação nas VMs continua pendente.
+
 **26/10/2026 — identificação local simplificada:** substituído socket de descoberta por InetAddress.getLocalHost(), preservando PLAYER_IP opcional. Porta reservada com ServerSocket(porta), padrão0, preservando PLAYER_PORT opcional. Primeiro teste **falhou**: anúncio127.0.1.1, origem127.0.0.1, rejeição por IP divergente. Corrigido associando o socket de saída ao IP anunciado antes de connect com timeout. Repetição **passou**: IP127.0.1.1, portas46557/38065, entradasabc/9 rejeitadas, sequência0/3/1/4/2, vitória X e derrota O, ambos saída0. Compilação JDK17 em /tmp/tictactoe-simple-address **passou**, avisos unchecked esperados. Sem Display em execução; nenhum teste multicast novo. Timeout120s preservado no código, não reexecutado; VMs pendentes. Loopback não funciona entre máquinas. Documentação/guia e caso23 sincronizados.
 
 **26/10/2026 — nomes explícitos na comunicação do jogador:** Player distingue rmiRegistryHost/rmiRegistryPort, localPlayerAddress/localPlayerRequestedPort/localPlayerListeningSocket e opponentIpAddress/opponentListeningPort/opponentConnectionSocket. Métodos privados e parâmetros renomeados; TcpGameSession distingue entrada/saída do adversário e terminal/símbolo do jogador local. Guia de apresentação sincronizado. Somente nomes e quebras de linha alterados, sem mudança nos contratos JSON/RMI, variáveis de ambiente, descoberta automática ou timeouts. Compilação JDK17 em /tmp/tictactoe-explicit-names: **passou**, com avisos unchecked esperados. Partidas/VMs: **não reexecutadas** nesta refatoração. Próximo passo funcional permanece validação nas VMs.
@@ -299,6 +303,10 @@ O código importa filas TCP/UDP, espera com `wait`/`notifyAll`, FIFO, primeiro i
 3. Completar os cenários de robustez não executados. Após integração remota validada, preparar documentação Web e pitch previstos no PDF. Não iniciar jogadorUDP sem pedido específico.
 
 ## BLOCO DE RETOMADA (copiar para outro chat)
+
+> 26/10/2026: roteiro atual possui seis partes/10min e cinco slides propostos. Parte5 mapeia código de falhas; parte6 traz comandos, vitória X/O e empate. Edição no Canva com títulos, rótulos e transições documentada. Sem clipe7 e sem novos testes nesta revisão; registrar evidências reais ao gravar.
+
+> 26/10/2026: preparado ROTEIRO_DO_VIDEO.md para sete minivídeos (10min), alternando seis slides propostos, código e testes manuais. Foco em RMI/TCP/multicast e falhas; inclui falas e limites reais. Sem alteração Java, novos testes, deck ou vídeo produzido. Usar como base de ensaio e gravar somente evidências reais; VMs ainda pendentes.
 
 > 26/10/2026: identificação do Player agora usa getLocalHost e ServerSocket(0), sem descoberta pelo Registry. Overrides preservados. Saída TCP vinculada ao IP anunciado para manter validação do adversário. Compilação e partida local com entradas inválidas passaram após corrigir divergência de IP. getLocalHost retornou127.0.1.1; VMs precisam anunciar IP alcançável. Novos testes remotos/timeout/multicast não executados.
 
