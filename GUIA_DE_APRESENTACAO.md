@@ -2,9 +2,9 @@
 
 Preparado em 26/10/2026 a partir dos nove fontes Java do repositório. O guia explica a implementação atual; não substitui o enunciado nem transforma decisões do projeto em requisitos do professor.
 
-**Roteiro para gravação em partes:** consulte [ROTEIRO_DO_VIDEO.md](ROTEIRO_DO_VIDEO.md), com seis minivídeos, cinco propostas de slides, fala-base, trechos de código e demonstrações focadas nas falhas.
+**Apresentação e vídeo:** a estrutura de slides e o roteiro do vídeo são um único documento, [ROTEIRO_DO_VIDEO.md](ROTEIRO_DO_VIDEO.md), com oito segmentos e oito slides.
 
-**Como usar:** leia as seções 1–5 para entender o sistema; use a seção 6 como roteiro de um vídeo de aproximadamente 10 minutos. A seção 7 contém uma demonstração com comandos. A seção 8 ajuda a responder perguntas.
+**Como usar:** leia as seções 1–5 para entender o sistema e estudar cada segmento da apresentação. As seções 6 e 7 indicam onde estão o roteiro e a demonstração. A seção 8 ajuda a responder perguntas.
 
 ## 1. O sistema em uma frase
 
@@ -359,126 +359,45 @@ UUID-da-partida é um marcador explicativo; em execução é usado o UUID real c
 
 Há evidências históricas de testes locais de regras, vitória X/O, empate, falhas e multicast. A última alteração de ID no Display foi verificada com uma vitória X e cinco snapshots identificados. Esses registros não significam que todos os cenários tenham sido repetidos em cada alteração. Este guia foi conferido contra os fontes; não executou novos testes.
 
-## 6. Roteiro sugerido para 10 minutos
+### 5.1. Matriz de falhas
 
-Os tempos são metas de edição. Ensaie e ajuste a fala; não é necessário ler o guia inteiro no vídeo.
+Base para o segmento 07 do roteiro e para responder perguntas.
 
-| Tempo | Mostrar | Mensagem principal |
-| --- | --- | --- |
-| 0:00–0:40 | Visão geral e terminais/VMs | Objetivo e três programas |
-| 0:40–1:20 | Fluxo RMI/TCP/multicast | Papel de cada comunicação |
-| 1:20–2:35 | MatchService e getOponent | Contrato, fila e espera sincronizada |
-| 2:35–3:20 | Player | Descoberta, reserva da porta e conexão |
-| 3:20–4:35 | TcpGameSession | Turnos, delimitação TCP, rejeição e fim |
-| 4:35–5:25 | TicTacToeRules | Validação e cálculo de vitória |
-| 5:25–6:10 | GameMessages | Comparação do estado esperado com o recebido |
-| 6:10–6:45 | JsonMessages e JsonUtil | Validação de contrato versus parsing |
-| 6:45–7:35 | Display | Publicação, ID e vários observadores |
-| 7:35–9:30 | Demonstração | Pareamento, erro de entrada e partida completa |
-| 9:30–10:00 | Resultados e limites | O que funciona e o que ainda validar |
-
-### Abertura
-
-“Este projeto implementa um jogo da velha distribuído com três programas. O servidor encontra pares de jogadores por RMI. Depois, os jogadores se comunicam diretamente por TCP. As jogadas aceitas também são publicadas por multicast, permitindo que displays acompanhem a partida.”
-
-### Trecho central: concorrência
-
-“O método getOponent pode ser chamado por vários jogadores. Por isso a fila fica protegida por um monitor. Quando o primeiro jogador não encontra par, sua chamada espera, mas libera esse monitor. A chegada do segundo jogador permite preencher duas respostas e acordar a primeira chamada. Assim os dois recebem um oponente e apenas um recebe a indicação de começar.”
-
-### Trecho central: consistência
-
-“Cada jogador possui uma cópia do tabuleiro. Ao receber uma jogada, ele verifica o número esperado, aplica a posição em uma cópia das regras e compara as nove casas com a mensagem. Uma tentativa inválida é rejeitada e pode ser refeita sem avançar a sequência. A última jogada termina com uma confirmação explícita do resultado.”
-
-### Trecho central: exibição
-
-“O publicador multicast roda dentro do jogador. O programa Display é independente e pode ter várias instâncias. A mensagem inclui o ID da partida antes do objeto da jogada; assim cada tabuleiro exibido fica identificado. O jogo não espera resposta dos displays e continua se um deles for fechado.”
-
-### Encerramento
-
-“O projeto separa pareamento, sessão, regras e interpretação de mensagens. A demonstração mostra os resultados observados neste ambiente. O multicast não garante entrega e não implementei reconexão nem cancelamento imediato no match. A próxima validação é o funcionamento completo nas VMs com a mesma versão dos fontes.”
-
-Se a demonstração remota já tiver sido executada por você, substitua a última frase pelo resultado real observado, sem atribuir ao guia testes que ele não executou.
-
-### O que vale destacar no editor
-
-Mostre `MatchService` inteiro; em `MatchServer`, foque no bloco sincronizado/espera; em `Player`, na reserva da porta e no lookup; em `TcpGameSession`, em `playLocalTurn` e `acceptOpponentMove`; em regras, em `placeMove` e `hasWinningLine`; em `GameMessages`, em `validateMove`; nos utilitários, apenas as entradas principais; no `Display`, em `publishMove` e `showMove`.
-
-Evite percorrer importações e cada linha do parser no vídeo. Eles são importantes para estudar, mas consomem tempo que pode demonstrar a arquitetura e o jogo funcionando.
-
-## 7. Demonstração manual para a gravação
-
-### Preparação local, sem depender das VMs
-
-Objetivo: mostrar pareamento, uma entrada inválida, troca TCP, resultado nos dois jogadores e ID no Display. Pré-requisitos: JDK17 no PATH, fontes atuais, portas1199/5121/8821 disponíveis e multicast loopback permitido. Use quatro terminais. Dois displays exigem um quinto terminal opcional.
-
-1. Em um terminal, compile os fontes fora da árvore do projeto:
-
-```bash
-cd /home/thiago/Desktop/TicTacToeMulticast
-mkdir -p /tmp/tictactoe-video
-javac -encoding UTF-8 -d /tmp/tictactoe-video code/*.java
-```
-
-2. Terminal1 — servidor:
-
-```bash
-RMI_HOST=127.0.0.1 RMI_REGISTRY_PORT=1199 RMI_OBJECT_PORT=5121 RMI_SERVICE_NAME=MatchVideo java -cp /tmp/tictactoe-video MatchServer
-```
-
-Esperado: mensagem com Registry, serviço e porta do objeto remoto.
-
-3. Terminal2 — Display:
-
-```bash
-MULTICAST_GROUP=225.1.1.21 MULTICAST_PORT=8821 MULTICAST_INTERFACE=lo MULTICAST_TTL=0 java -cp /tmp/tictactoe-video Display
-```
-
-Esperado: escuta no grupo pela interface lo. Opcionalmente repetir em outro terminal para mostrar dois observadores.
-
-4. Terminal3 — primeiro jogador:
-
-```bash
-env -u PLAYER_IP -u PLAYER_PORT RMI_HOST=127.0.0.1 RMI_REGISTRY_PORT=1199 RMI_SERVICE_NAME=MatchVideo PLAYER_PROTOCOL=tcp MULTICAST_GROUP=225.1.1.21 MULTICAST_PORT=8821 MULTICAST_INTERFACE=lo MULTICAST_TTL=0 java -cp /tmp/tictactoe-video Player
-```
-
-Esperado: IP resolvido pelo hostname (pode ser127.0.1.1 neste teste local), uma porta atribuída e espera por adversário.
-
-5. Terminal4 — repetir exatamente o comando do passo4, antes de300s. Esperado: primeiro jogador=X, segundo=O, mesmo UUID nos dois.
-
-6. No X, digitar `abc` e depois `9`. Esperado: mensagens de correção; nenhuma dessas tentativas avança a partida. Então jogar nesta ordem:
-
-| Ordem | Terminal | Entrada | Estado esperado |
+| Falha | Onde detectar | Reação implementada | Limitação |
 | --- | --- | --- | --- |
-| 1 | X | 0 | X na casa0 |
-| 2 | O | 3 | O na casa3 |
-| 3 | X | 1 | X nas casas0 e1 |
-| 4 | O | 4 | O nas casas3 e4 |
-| 5 | X | 2 | X completa a linha superior |
+| Pedido malformado | JsonMessages/getOponent | INVALID_REQUEST; não enfileira | Não é autenticação |
+| Registro pendente duplicado | getOponent | DUPLICATE; mantém o original | Desistência não cancela imediatamente |
+| Ausência de par | timedWait e prazo | Remove pedido e retorna TIMEOUT | Depende de servidor e comunicação ainda funcionarem |
+| Registry/serviço indisponível | lookup/getOponent e exceções | Mensagem local, encerra tentativa sem retry | Resultado pode ser desconhecido se a chamada já foi enviada |
+| Falha ao conectar/aceitar | connect/accept e prazo | Exceção, fechamento, saída 1 | Não tenta outro oponente automaticamente |
+| Adversário fecha conexão | read retorna -1 ou IOException | Erro; aviso remoto quando possível | Não garante detecção instantânea de toda falha de rede |
+| Adversário sem resposta | Prazo absoluto e setSoTimeout | Encerra por inatividade | Sem prazo garantido para todas as escritas |
+| Jogada inconsistente legível | GameMessages.validateMove | Rejeita; preserva estado e contador | Prazo original não reinicia |
+| JSON TCP ilegível/UTF-8 inválido/excessivo | readMessage e decoder | Encerra por erro | Não tenta continuar um fluxo inválido |
+| Entrada local inválida | readLocalMove | Pede nova entrada | EOF do terminal encerra por erro |
+| Publicador multicast indisponível | openPublisher/publishMove | Aviso e publicação desativada | Displays podem deixar de atualizar |
+| Datagrama inválido | Display.main/readPacket | Descarta e segue recebendo | Falha real do socket receptor encerra o Display |
+| Perda/reordenação multicast | Sem detecção completa | Próximo snapshot pode melhorar a visualização | Sem ACK, reenvio ou filtro de ordem |
+| Queda do MatchServer | Exceções nas chamadas; fila em memória | Clientes podem falhar; nova execução necessária | Sem réplica/persistência; partida já conectada não depende do match |
 
-Esperado: vitória no X, derrota no O e vitóriaX no Display. Cada snapshot multicast mostra o mesmo ID. Os jogadores encerram; servidor e Display continuam ativos. Feche estes últimos com Ctrl+C após gravar.
+Outros pontos do código: Player.java:33 (RemoteException sem repetição automática), TcpGameSession.java:134 (rollback com previousRules quando a própria jogada é rejeitada), TcpGameSession.java:229 (observa a rede enquanto o usuário digita), TcpGameSession.java:301 (limite de tamanho), TcpGameSession.java:330 (sendFailureWhenPossible). O enunciado pede tolerância a falhas de forma ampla; não afirmar que estes mecanismos esgotam a exigência.
 
-**Sinais de falha:** ausência do par; IP/porta incorretos; erro de bind; tabuleiros divergentes; ausência de confirmação final; datagramas válidos descartados. Se o jogo terminar normalmente mas o Display não mostrar nada, investigue o caminho multicast separadamente.
+## 6. Roteiro de 10 minutos
 
-### Uma falha curta que pode ser mostrada
+O roteiro do vídeo e a estrutura de slides foram unificados em [ROTEIRO_DO_VIDEO.md](ROTEIRO_DO_VIDEO.md): oito segmentos e oito slides; em cada segmento, tempo, tela (slide ou código) e fala aparecem juntos, na ordem da apresentação. Cada slide corresponde ao segmento de vídeo com o mesmo número.
 
-Objetivo: demonstrar que a ausência de observadores não impede a partida. Com servidor e dois jogadores conectados, feche o Display por Ctrl+C e continue jogando. Esperado: jogadores concluem normalmente; não há confirmação exigida do receptor. Fechar o Display não simula uma falha de envio na rede, apenas ausência daquele observador.
+Ao estudar para cada segmento, use as seções deste guia: segmento 03 → 3.1, 3.2 e 3.8; segmento 04 → 3.3 e 3.4; segmento 05 → 3.5, 3.6 e 3.9; segmento 06 → 3.7; segmento 07 → seção 5 e matriz 5.1.
 
-Para demonstrar desconexão, comece outra partida e feche um Player por Ctrl+C. O adversário deve detectar a interrupção ao observar a rede/ler a conexão. Não apresente isso como mecanismo de reconexão: a reação é encerrar por erro.
+## 7. Demonstração manual
 
-Os comandos desta seção são um roteiro manual, não foram executados na criação do guia. Resultados de execuções anteriores estão no plano e nos casos20/21 de TESTES_MANUAIS.md.
-
-### Para apresentar nas VMs
-
-Use o .env já configurado e fontes da mesma versão. Em cada terminal:
+Os comandos, as sequências de jogadas (vitória X, vitória O, empate) e as cenas de falha estão no segmento 08 de [ROTEIRO_DO_VIDEO.md](ROTEIRO_DO_VIDEO.md), junto com a fala de cada cena. Para as VMs, use o .env já configurado e fontes da mesma versão:
 
 ```bash
 cd ~/tictactoe
 source ~/.bashrc
 ```
 
-Compile em cada VM com `javac -encoding UTF-8 *.java`. Execute `java -cp . MatchServer` na .14; `java -cp . Display` em terminais das .16/.17; depois `java -cp . Player` em outros terminais dessas duas VMs. Se ainda houver overrides antigos, remova-os do .env e execute `unset PLAYER_IP PLAYER_PORT` antes de iniciar os jogadores. O Java lê o ambiente exportado; não abre o arquivo .env sozinho.
-
-A sequência de jogadas é a mesma da demonstração local. Antes de gravar, verifique acesso às portas dinâmicas e multicast entre VMs. Não use TTL0 para a demonstração remota; ele foi escolhido acima para loopback.
+Compile em cada VM com `javac -encoding UTF-8 *.java`. Execute `java -cp . MatchServer` na .14; `java -cp . Display` em terminais das .16/.17; depois `java -cp . Player` em outros terminais dessas duas VMs. Se ainda houver overrides antigos, remova-os do .env e execute `unset PLAYER_IP PLAYER_PORT` antes de iniciar os jogadores. Não use TTL0 na demonstração remota.
 
 ## 8. Perguntas que podem aparecer
 
@@ -501,6 +420,19 @@ A sequência de jogadas é a mesma da demonstração local. Antes de gravar, ver
 **Uma falha de rede informa sempre o outro jogador?** Não. O código tenta avisar quando possível; com conexão perdida não pode garantir a entrega. Os prazos permitem encerrar localmente a espera.
 
 **O trabalho exige múltiplas partidas simultâneas?** Não explicitamente. Ele pede múltiplos pedidos de match e permite vários displays. A identificação multicast por partida é uma extensão escolhida no projeto.
+
+**Respostas rápidas para ensaiar**
+
+| Pergunta | Resposta |
+| --- | --- |
+| Por que não só TCP para tudo? | O trabalho separa funções: RMI no match, socket direto na partida e multicast na exibição |
+| Como o servidor devolve duas chamadas? | A primeira espera com timedWait liberando o monitor; a segunda preenche as duas respostas e chama notifyAll |
+| Quem escolhe a porta? | O sistema, ao receber 0; o Player mantém o ServerSocket aberto e anuncia getLocalPort |
+| TCP já valida a jogada? | Não; entrega dados em ordem. As regras e o protocolo validam o conteúdo |
+| Por que cópia do tabuleiro? | Para validar uma tentativa antes de aceitar seu estado e permitir desfazer rejeições |
+| Por que rejeição diferente do PDF? | Decisão do projeto: informar o motivo; o PDF sugere devolver a mesma mensagem |
+| O que acontece se o match cair? | Chamadas pendentes falham e a fila em memória se perde; partidas TCP já conectadas continuam |
+| A partida se recupera de queda? | Não; encerra com erro/inatividade, tenta avisar e fecha recursos |
 
 ## 9. Referências e estado deste material
 

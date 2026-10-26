@@ -304,6 +304,8 @@ O código importa filas TCP/UDP, espera com `wait`/`notifyAll`, FIFO, primeiro i
 
 ## BLOCO DE RETOMADA (copiar para outro chat)
 
+> 26/10/2026: apresentação e vídeo unificados em ROTEIRO_DO_VIDEO.md: oito segmentos (10min) e oito slides, cada slide igual ao segmento de mesmo número (abertura, arquitetura, RMI, TCP, consistência, multicast, falhas, demonstração). Deck publicado no claude.ai (link no roteiro), sem rodapé e sem slide de conclusão; faixa inferior esquerda reservada ao rótulo do vídeo. Seções 6/7 do guia passam a apontar para esse documento. Revisão seguinte: cada segmento virou uma tabela tempo/tela/fala, a demonstração ficou dentro do segmento 08, edição no Canva foi removida e matriz de falhas/perguntas foram movidas para o guia. Depois, cada segmento com código (03–07) recebeu o bloco "O que entender para explicar este código", conferido contra os fontes. Entradas abaixo sobre seis/sete clipes são históricas. Sem alteração Java, novos testes ou vídeo gravado.
+
 > 26/10/2026: roteiro atual possui seis partes/10min e cinco slides propostos. Parte5 mapeia código de falhas; parte6 traz comandos, vitória X/O e empate. Edição no Canva com títulos, rótulos e transições documentada. Sem clipe7 e sem novos testes nesta revisão; registrar evidências reais ao gravar.
 
 > 26/10/2026: preparado ROTEIRO_DO_VIDEO.md para sete minivídeos (10min), alternando seis slides propostos, código e testes manuais. Foco em RMI/TCP/multicast e falhas; inclui falas e limites reais. Sem alteração Java, novos testes, deck ou vídeo produzido. Usar como base de ensaio e gravar somente evidências reais; VMs ainda pendentes.

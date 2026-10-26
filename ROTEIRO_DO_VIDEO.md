@@ -1,279 +1,280 @@
-# Roteiro de gravação — comunicação e tratamento de falhas
+# Apresentação e roteiro do vídeo — TicTacToeMulticast
 
-Baseado no código atual em 26/10/2026 e no enunciado trab-2-rmi-multi-2026-1.pdf. O professor pede infraestrutura tolerante a falhas e pitch de aproximadamente 10 minutos. As políticas de 300/120 segundos, controles JSON e ausência de reconexão são decisões deste projeto, não prescrições literais do professor.
+Documento único para os slides e o vídeo (pitch de ~10 minutos pedido no enunciado). Cada slide corresponde ao segmento de mesmo número. Dentro de cada segmento, os passos estão na ordem de apresentação: **tempo, o que está na tela (slide ou código) e o que falar**, tudo na mesma linha.
 
-Este documento é o roteiro de estudo, fala e edição; os textos de slide abaixo podem ser copiados para sua apresentação. O guia GUIA_DE_APRESENTACAO.md complementa a explicação dos nove arquivos. Não é necessário explicar cada linha no vídeo.
+Slides prontos (mesma ordem e numeração, fala de cada segmento nas notas): [apresentação no claude.ai](https://claude.ai/artifact/6hTV18v5J5XeGCL5A2kY6T).
 
-## 1. Organização dos minivídeos
+Material de estudo (explicação dos arquivos, matriz de falhas, perguntas): [GUIA_DE_APRESENTACAO.md](GUIA_DE_APRESENTACAO.md). Os números de linha foram conferidos em 26/10/2026; se o código mudar, localize pelo nome do método.
 
-Grave seis clipes independentes. Não há clipe separado de encerramento; os limites ficam na parte5 e a última cena conclui o vídeo. A soma planejada é de 10 minutos, incluindo as demonstrações; ensaie a fala para ajustar o tempo.
+## Visão geral
 
-| Clipe | Posição no vídeo | Duração | Tela principal | O que o espectador deve entender |
-| --- | --- | --- | --- | --- |
-| 01 | 0:00–0:40 | 40 s | Slide 1 | Os três programas e o caminho dos dados |
-| 02 | 0:40–2:10 | 1 min 30 s | Slide 2 e código RMI | Como dois jogadores encontram um adversário |
-| 03 | 2:10–4:00 | 1 min 50 s | Slide 3 e código TCP | Como conectam e trocam jogadas válidas |
-| 04 | 4:00–5:20 | 1 min 20 s | Slide 4 e código multicast | Como vários displays recebem sem bloquear o jogo |
-| 05 | 5:20–7:20 | 2 min | Slide 5 e código de falhas | Onde detectar, corrigir, encerrar ou continuar |
-| 06 | 7:20–10:00 | 2 min 40 s | Terminais | Vitória/derrota, empate e falhas demonstradas |
+| Nº | Tempo | Segmento | Tela |
+| --- | --- | --- | --- |
+| 01 | 0:00–0:30 | Jogo da velha distribuído | Slide 1 |
+| 02 | 0:30–1:10 | Arquitetura e caminho de uma partida | Slide 2 |
+| 03 | 1:10–2:30 | RMI — pareamento | Slide 3 → código |
+| 04 | 2:30–4:00 | TCP — conexão e protocolo da partida | Slide 4 → código |
+| 05 | 4:00–4:50 | Consistência — regras e validação | Slide 5 → código |
+| 06 | 4:50–5:50 | Multicast — vários displays | Slide 6 → código |
+| 07 | 5:50–7:30 | Tolerância a falhas | Código → Slide 7 |
+| 08 | 7:30–10:00 | Demonstração e conclusão | Slide 8 → terminais |
 
-RMI é uma forma de invocar métodos remotamente; socket é uma API de comunicação. Neste projeto, a partida usa sockets TCP e o multicast usa datagramas UDP. Não são três protocolos do mesmo nível. O JDK também utiliza transporte de rede internamente no RMI; nosso código não controla suas mensagens como controla os sockets da partida.
+Cores fixas em todos os slides: **azul = RMI**, **verde = TCP**, **laranja = multicast**, sempre acompanhadas de texto.
 
-## 2. Clipe 01 — arquitetura
+**Faixa de título no vídeo:** a faixa inferior esquerda (canto de 0 a ~830 px de largura e ~60 px de altura, em 1920×1080) fica reservada para o rótulo que você vai sobrepor. Os slides deixam essa área livre (conteúdo termina bem acima) e o código na tela dividida também não deve ser movido para lá. Texto sugerido por segmento: 01 Abertura · 02 Arquitetura · 03 RMI · 04 TCP · 05 Consistência · 06 Multicast · 07 Falhas · 08 Demonstração.
 
-### Slide 1: Três programas, três responsabilidades
+## 01 — Jogo da velha distribuído (0:00–0:30)
 
-Texto para o slide:
+**Slide 1 — Jogo da velha distribuído: RMI, TCP e multicast**
 
 - MatchServer: encontra o adversário por RMI
 - Player: joga diretamente com o outro Player por TCP
-- Display: recebe atualizações por multicast
+- Display: acompanha a partida por multicast
+- Java 17, somente JDK; VMs 152.92.236.14, .16 e .17
 
-Distribuição: MatchServer na VM14; Players nas VMs16/17; Displays opcionais nas VMs dos jogadores.
 
-Para montar o visual, use três conjuntos de nomes e setas: Players → MatchServer para o pareamento; Player ↔ Player para a partida; Players → grupo multicast → Displays para a exibição. Diferencie as comunicações por cor e mantenha os mesmos nomes e cores nos próximos slides.
+| Tempo | Tela | Fala |
+| --- | --- | --- |
+| 0:00–0:30 | Slide 1 | "Meu projeto implementa um jogo da velha distribuído com três programas. O servidor de match encontra dois jogadores compatíveis. Depois do pareamento, os jogadores trocam as jogadas diretamente por TCP. Os displays acompanham a partida por multicast. Cada comunicação tem uma responsabilidade e um tratamento de falhas próprio. Antes do código, vou mostrar o caminho de uma partida." |
 
-### Fala-base
+## 02 — Arquitetura e caminho de uma partida (0:30–1:10)
 
-“Meu projeto implementa um jogo da velha distribuído. O servidor de match encontra dois jogadores compatíveis. Depois do pareamento, os jogadores trocam as jogadas diretamente por TCP. Os displays acompanham a partida por multicast. Cada comunicação tem uma responsabilidade e um tratamento de falhas próprio.”
+**Slide 2 — Arquitetura e caminho de uma partida** (baseado na Figura 1 do enunciado)
 
-Transição: “Vou começar pelo encontro dos jogadores, que acontece por RMI.”
+```text
+Player A ── RMI ──> MatchServer + Registry <── RMI ── Player B
+   │                    (VM .14)                       │
+   └──────────── partida direta por TCP ───────────────┘
+   │                                                   │
+   └──────────── publicação multicast ─────────────────┘
+                 225.1.1.21:8821 → Display 1, 2, ...
+```
 
-## 3. Clipe 02 — RMI e pareamento
+1. Player reserva IP e porta
+2. getOponent por RMI → adversário e quem inicia
+3. Partida direta por TCP
+4. Jogada aceita → multicast para os displays
+5. Fim confirmado pelos dois jogadores
 
-### Slide 2: RMI — localizar o serviço e encontrar um par
 
-Texto para o slide:
+| Tempo | Tela | Fala |
+| --- | --- | --- |
+| 0:30–0:50 | Slide 2, diagrama | "O MatchServer fica na VM 14 junto com o Registry RMI. Os Players rodam nas VMs 16 e 17. Primeiro, cada Player reserva um endereço e chama getOponent. Quando há par, os dois recebem o endereço do adversário e um deles recebe a indicação de começar." |
+| 0:50–1:10 | Slide 2, passos 3–5 | "A partir daí o servidor sai do caminho: as jogadas vão direto de um Player ao outro por TCP, e cada jogada aceita é publicada por multicast para quantos displays estiverem ouvindo. São nove arquivos Java, mas apenas três programas. Vou começar pelo encontro dos jogadores, que acontece por RMI." |
 
-- Registry: catálogo de serviços, porta 9821
+## 03 — RMI: pareamento (1:10–2:30)
+
+**Slide 3 — RMI: localizar o serviço e encontrar um par** (azul)
+
+- Registry na porta 9821: catálogo de serviços
 - MatchService.getOponent(String): pedido e resposta em JSON
-- Fila por protocolo; prazo padrão de 300 segundos
-- Dois retornos: adversário e indicação de quem começa
+- Uma fila por protocolo; só pareia protocolos iguais
+- Os dois recebem resposta: um com inicia=true, outro com false
+- Sem par em 300 s → TIMEOUT
 
-O Registry e o objeto remoto são diferentes. O Registry fornece a referência do serviço; a chamada getOponent é executada no MatchServer. A porta do objeto remoto é configurada separadamente por RMI_OBJECT_PORT.
+```json
+{"ip":"152.92.236.16","porta":40065,"protocolo":"tcp"}
+{"ip":"152.92.236.17","porta":39135,"inicia":true}
+```
 
-### Mostrar no código, nesta ordem
+| Tempo | Tela | Fala |
+| --- | --- | --- |
+| 1:10–1:25 | Slide 3 | "RMI permite chamar um método que executa em outra máquina. O jogador envia seu IP, porta e protocolo; o servidor devolve o endereço do adversário e quem começa." |
+| 1:25–1:35 | [MatchService.java](/home/thiago/Desktop/TicTacToeMulticast/code/MatchService.java): interface inteira | "Os dois lados compartilham esta interface. Ela estende Remote e declara RemoteException para falhas da chamada remota." |
+| 1:35–1:47 | [MatchServer.java:149](/home/thiago/Desktop/TicTacToeMulticast/code/MatchServer.java:149), startMatchServer: exportObject, createRegistry, rebind | "O servidor exporta sua implementação, cria o próprio Registry e registra o nome do serviço. Não preciso rodar o rmiregistry separado." |
+| 1:47–2:00 | [Player.java:49](/home/thiago/Desktop/TicTacToeMulticast/code/Player.java:49), findOpponentAndStartGame: getRegistry, lookup, getOponent | "O jogador procura esse nome no Registry e recebe uma referência remota. A chamada parece local, mas executa no servidor." |
+| 2:00–2:15 | [MatchServer.java:56](/home/thiago/Desktop/TicTacToeMulticast/code/MatchServer.java:56), getOponent: escolha da fila e synchronized | "O servidor mantém uma fila por protocolo, protegida por synchronized, porque o RMI atende cada jogador em uma thread diferente." |
+| 2:15–2:30 | getOponent: timedWait, formação do par e timeout (linhas 98–109) | "O primeiro jogador espera com timedWait, que libera o monitor. O segundo entra, forma o par, preenche as duas respostas e acorda o primeiro. Se ninguém aparecer em 300 segundos, o pedido sai da fila e recebe TIMEOUT. Com o endereço do adversário, os jogadores passam a conversar diretamente." |
 
-1. code/MatchService.java: interface Remote e assinatura com RemoteException.
-2. code/MatchServer.java, startMatchServer: exportObject, createRegistry e rebind. O programa já inicializa o Registry; não é necessário executar rmiregistry à parte.
-3. code/Player.java, findOpponentAndStartGame: LocateRegistry.getRegistry, lookup e getOponent.
-4. code/MatchServer.java, getOponent: seleção da fila, synchronized, pareamento, timedWait e retorno TIMEOUT. Mostre blocos pequenos, não o método inteiro em uma tela.
+### O que entender para explicar este código
 
-### Fala-base
+- **Interface compartilhada:** MatchService está no servidor e no jogador porque é o contrato. A implementação e a fila ficam só no MatchServer; o objeto que o jogador recebe do `lookup` é uma referência remota (stub), não uma cópia do servidor.
+- **Duas portas:** o Registry (9821 nas VMs) é só um catálogo de nomes. O objeto remoto exportado por `exportObject` atende as chamadas em outra porta, configurada por RMI_OBJECT_PORT.
+- **String e JSON:** o RMI transporta a String e faz o marshalling/unmarshalling. JsonUtil transforma o texto em Map; JsonMessages confere se os campos `ip`, `porta` e `protocolo` são válidos.
+- **Por que synchronized:** o RMI atende cada chamada em uma thread própria. Sem o monitor, dois pedidos poderiam alterar a fila ao mesmo tempo.
+- **Por que timedWait libera o monitor:** se a primeira chamada esperasse segurando o monitor, a segunda nunca entraria para formar o par. Ao formar o par, a segunda chamada preenche as duas respostas e chama `notifyAll`; a primeira acorda e retorna.
+- **Por que o `while`:** acordar não garante que aquela chamada já tem resposta; a condição é verificada de novo depois de cada espera.
+- **Prazo:** medido com `System.nanoTime()`, a partir do recebimento do pedido válido. Expirou → o pedido sai da fila e recebe TIMEOUT.
+- **Erros diferentes:** TIMEOUT, DUPLICATE, INVALID_REQUEST e INTERRUPTED são JSON de erro da aplicação, devolvidos pelo servidor. RemoteException é falha da chamada remota (rede, Registry fora do ar); o cliente não repete automaticamente, porque o pedido pode já ter chegado.
+- **Limite:** fechar um Player não cancela na hora o pedido dele; ele sai pelo prazo ou é pareado antes. A fila fica só em memória.
 
-“RMI permite chamar um método que executa em outra máquina. Os dois lados compartilham a interface MatchService. O servidor exporta sua implementação e registra o nome no Registry. O jogador consulta esse nome e recebe uma referência remota para chamar getOponent.
+Aprofundar: guia, seções 3.1, 3.2 e 3.8.
 
-O pedido contém o IP e a porta de escuta do próprio jogador, além do protocolo. O servidor mantém uma fila por protocolo e só combina jogadores compatíveis. Quando encontra um par, retorna o endereço do adversário para cada um, com inicia verdadeiro para um deles e falso para o outro.
+## 04 — TCP: conexão e protocolo da partida (2:30–4:00)
 
-A fila é protegida por synchronized para evitar alterações concorrentes inconsistentes. Enquanto o primeiro jogador espera, timedWait libera o monitor. O segundo consegue entrar, formar o par e acordar quem estava esperando. A chamada é reavaliada em um laço.
+**Slide 4 — TCP: uma conexão para os dois sentidos** (verde)
 
-Se não aparecer adversário em 300 segundos, o pedido é removido e recebe TIMEOUT. Um pedido duplicado pendente é rejeitado. Se houver falha RMI, o cliente informa o problema e não repete automaticamente, porque o pedido pode ter chegado ao servidor.”
-
-### O que compreender antes de gravar
-
-O RMI transporta a String e cuida do marshalling/unmarshalling. JsonUtil interpreta o texto JSON; não substitui o transporte do RMI. JSON de erro de aplicação, como TIMEOUT, é diferente de RemoteException por falha na chamada.
-
-Fechar um Player não cancela imediatamente seu pedido pendente. O servidor o remove pelo prazo, salvo se houver pareamento antes. Não existe replicação nem persistência da fila. Os 300 segundos limitam a espera de pareamento no servidor, não constituem um timeout universal da comunicação RMI.
-
-Transição: “Com o endereço do adversário, os jogadores passam a conversar diretamente.”
-
-## 4. Clipe 03 — socket TCP e consistência da partida
-
-### Slide 3: TCP — uma conexão para os dois sentidos
-
-Texto para o slide:
-
-- IP local: getLocalHost; porta livre: ServerSocket(0)
-- inicia=true conecta e usa X; o outro aceita e usa O
-- UTF-8; um JSON por linha
-- Validação de sequência, casa, tabuleiro e resultado
-- Conexão, aceite e espera de resposta: até 120 segundos
-
-### Mostrar no código
-
-1. code/Player.java: readLocalPlayerAddress, new ServerSocket(localPlayerRequestedPort), getLocalPort e criação do pedido RMI.
-2. openConnectionWithOpponent: accept, verificação do IP, bind da saída e connect com timeout.
-3. code/TcpGameSession.java: construtor com reader/writer, exchangeSessionIdentifier e sendMessage.
-4. code/GameMessages.java: validateMove; code/TicTacToeRules.java: placeMove. Explique a relação entre os dois sem percorrer todas as regras.
-5. code/TcpGameSession.java: readMessage e ensureTimeRemaining.
-
-### Fala-base
-
-“O jogador obtém o IP associado ao nome da máquina e reserva uma porta livre antes de procurar um adversário. A porta zero é um pedido ao sistema operacional; getLocalPort informa a porta realmente atribuída. Esses dados são enviados ao match.
-
-Quem recebe inicia verdadeiro conecta ao adversário e joga com X. O outro aguarda em accept e joga com O. O ServerSocket aceita a conexão; o Socket retornado faz a troca de dados. A mesma conexão permite enviar e receber. O socket de saída é associado ao IP anunciado para manter a verificação do adversário.
-
-Depois, o Player entrega a conexão ao TcpGameSession. Ele prepara os streams em UTF-8 e o iniciador envia um identificador de partida. Cada mensagem termina com uma quebra de linha, porque TCP fornece um fluxo de bytes e não preserva os limites dos JSONs.
-
-Cada jogador mantém seu tabuleiro. Ao receber uma jogada, verifica o número esperado, a casa, o tabuleiro resultante e o resultado informado. TCP mantém a ordem dos dados da conexão, mas não sabe se a jogada respeita o jogo. Essa verificação é nossa.
-
-Uma tentativa legível, mas inválida, recebe uma rejeição com motivo. Ela pode ser refeita sem avançar o contador. JSON ilegível ou falha de conexão encerram a sessão. Uma jogada final válida leva à troca dos controles fim e confirmacao_fim.”
-
-### Exemplo que pode aparecer por alguns segundos
+- IP local por getLocalHost; porta livre por ServerSocket(0), reservada antes do match
+- inicia=true conecta e joga com X; o outro aceita e joga com O
+- UTF-8, um JSON por linha
+- Controle inicio com UUID da partida, depois as jogadas
+- Conexão, aceite e espera de resposta: até 120 s
 
 ```json
 {"Numero":0,"Jogada":4,"Tabuleiro":[0,0,0,0,1,0,0,0,0],"Resultado":"jog"}
 ```
 
-Numero é global da partida; Tabuleiro já inclui a jogada do emissor. As chaves e sua capitalização seguem o contrato. Os controles inicio/rejeicao/fim/confirmacao_fim são mensagens separadas escolhidas pelo projeto.
+| Tempo | Tela | Fala |
+| --- | --- | --- |
+| 2:30–2:45 | Slide 4 | "A partida usa uma única conexão TCP para os dois sentidos. A jogada usa exatamente os quatro campos do enunciado: Numero, Jogada, Tabuleiro e Resultado." |
+| 2:45–3:05 | [Player.java](/home/thiago/Desktop/TicTacToeMulticast/code/Player.java): readLocalPlayerAddress, new ServerSocket(localPlayerRequestedPort), getLocalPort | "O jogador obtém o IP pelo nome da máquina e abre a escuta na porta zero: o sistema operacional escolhe uma porta livre, e getLocalPort informa qual foi. Reservo antes do match para não anunciar uma porta que outro processo poderia ocupar." |
+| 3:05–3:25 | [Player.java:128](/home/thiago/Desktop/TicTacToeMulticast/code/Player.java:128), openConnectionWithOpponent: connect com prazo, accept e verificação do IP | "Quem recebeu inicia verdadeiro conecta e joga com X. O outro aceita a conexão e joga com O, conferindo se ela veio do IP informado pelo match." |
+| 3:25–3:45 | [TcpGameSession.java](/home/thiago/Desktop/TicTacToeMulticast/code/TcpGameSession.java): construtor UTF-8, [exchangeSessionIdentifier:90](/home/thiago/Desktop/TicTacToeMulticast/code/TcpGameSession.java:90), [sendMessage:310](/home/thiago/Desktop/TicTacToeMulticast/code/TcpGameSession.java:310) | "A sessão prepara leitura e escrita em UTF-8. O iniciador envia um identificador único da partida. Cada JSON termina com uma quebra de linha, porque TCP é um fluxo de bytes e não separa mensagens sozinho." |
+| 3:45–4:00 | [readMessage:277](/home/thiago/Desktop/TicTacToeMulticast/code/TcpGameSession.java:277) e [ensureTimeRemaining:350](/home/thiago/Desktop/TicTacToeMulticast/code/TcpGameSession.java:350) | "A leitura acumula até a quebra de linha e respeita um prazo absoluto de 120 segundos. TCP entrega em ordem, mas não sabe se a jogada respeita o jogo. Essa verificação é nossa." |
 
-### O que compreender antes de gravar
+### O que entender para explicar este código
 
-getLocalHost pode retornar loopback, como 127.0.1.1. Funciona para um teste na mesma máquina, mas as VMs precisam anunciar endereços alcançáveis entre si. PLAYER_IP e PLAYER_PORT continuam opcionais para ajustes.
+- **ServerSocket x Socket:** ServerSocket só espera conexões (`accept`); o Socket devolvido por `accept` ou criado no `connect` é a conexão que envia e recebe. Depois de conectar, a escuta é fechada e a sessão usa só o Socket.
+- **Porta 0:** é um pedido para o sistema operacional escolher uma porta livre. `getLocalPort()` diz qual foi; essa é a porta enviada ao match. A escuta fica aberta desde antes da chamada RMI, por isso a porta não pode ser tomada por outro processo.
+- **getLocalHost:** devolve o IP associado ao nome da máquina. Pode ser 127.0.1.1, que só serve na mesma máquina; nas VMs o IP mostrado precisa ser alcançável pelo outro jogador (PLAYER_IP permite ajustar).
+- **Verificação do IP:** quem aceita confere se a conexão veio do IP que o match informou. Para isso funcionar, quem conecta faz `bind` no IP anunciado antes do `connect`. Isso é uma verificação básica, não autenticação.
+- **Três prazos diferentes:** `connect(endereco, prazo)` limita a conexão; `ServerSocket.setSoTimeout` limita o `accept`; `Socket.setSoTimeout` limita cada leitura. `ensureTimeRemaining` recalcula o tempo que falta até um prazo absoluto de 120 s, para que receber pedaços de mensagem não renove a espera.
+- **try com recursos:** fecha os sockets ao sair do bloco, inclusive quando ocorre exceção.
+- **Por que uma linha por JSON:** TCP entrega um fluxo de bytes; uma escrita pode chegar em partes ou junto com outra. `sendMessage` escreve o JSON, `\n` e faz `flush`; `readMessage` acumula até a quebra de linha. UTF-8 inválido, JSON ilegível ou mensagem acima de 16384 caracteres encerram a sessão.
+- **Campos da jogada:** `Numero` é o contador global da partida (começa em 0, só avança com jogada aceita); `Jogada` é a casa 0..8; `Tabuleiro` já inclui a jogada do emissor (0 vazia, 1 X, 2 O); `Resultado` é da perspectiva de quem jogou (`jog`, `vit`, `emp`).
+- **Controle inicio:** o iniciador gera um UUID e envia `{"evento":"inicio","partidaId":...}` antes da primeira jogada. Os controles são mensagens separadas das jogadas, escolha do projeto.
 
-connect(endereco, prazo) limita a conexão; ServerSocket.setSoTimeout limita accept; Socket.setSoTimeout limita leituras. A leitura recalcula o tempo restante para não renovar o prazo a cada caractere ou rejeição. Esses mecanismos não estabelecem um limite para toda operação de escrita. Durante a entrada humana, uma thread lê o terminal enquanto a sessão observa a rede, permitindo perceber EOF ou encerramento remoto.
+Aprofundar: guia, seções 3.3 e 3.4.
 
-Não confundir rollback local de uma tentativa rejeitada com recuperação de partida após desconexão: não há retomada automática.
+## 05 — Consistência: regras e validação (4:00–4:50)
 
-Transição: “O socket TCP mantém a partida entre os dois jogadores. Os displays usam outro canal.”
+**Slide 5 — Uma jogada só vale depois de verificada** (verde)
 
-## 5. Clipe 04 — multicast e independência do Display
+- Regras separadas da rede: TicTacToeRules
+- Ao receber: Numero esperado, casa válida, tabuleiro calculado = recebido, resultado coerente
+- Validação em uma cópia; o estado só muda se tudo conferir
+- Inválida → rejeicao com motivo; refazer sem avançar o Numero
+- Fim: fim → confirmacao_fim nos dois lados
 
-### Slide 4: Multicast — uma publicação, vários observadores
+| JsonUtil | JsonMessages | GameMessages |
+| --- | --- | --- |
+| "É JSON?" | "É um pedido de match válido?" | "A jogada é coerente com a partida?" |
 
-Texto para o slide:
+| Tempo | Tela | Fala |
+| --- | --- | --- |
+| 4:00–4:12 | Slide 5 | "Cada jogador mantém seu próprio tabuleiro e não confia no tabuleiro que recebe." |
+| 4:12–4:27 | [GameMessages.java:76](/home/thiago/Desktop/TicTacToeMulticast/code/GameMessages.java:76), validateMove | "Ao receber uma jogada, confiro o número esperado, aplico a casa em uma cópia das minhas regras e comparo as nove casas com a mensagem, além do resultado informado." |
+| 4:27–4:35 | [TicTacToeRules.java:22](/home/thiago/Desktop/TicTacToeMulticast/code/TicTacToeRules.java:22), placeMove; [hasWinningLine:74](/home/thiago/Desktop/TicTacToeMulticast/code/TicTacToeRules.java:74) | "As regras ficam separadas: não conhecem rede nem JSON." |
+| 4:35–4:50 | [TcpGameSession.java:169](/home/thiago/Desktop/TicTacToeMulticast/code/TcpGameSession.java:169), acceptOpponentMove: `gameRules = candidateRules` e rejeicao | "Só depois de validar aceito o novo estado. Uma tentativa inválida recebe rejeição com motivo e pode ser refeita sem avançar o contador. A última jogada termina com fim e confirmação, para os dois lados mostrarem o mesmo resultado. Para acompanhar de fora, usamos multicast." |
 
-- Grupo 225.1.1.21, porta 8821
-- Datagramas UDP; interface e TTL configuráveis
-- Snapshot completo com partidaId e jogada
-- Sem ACK; ausência de Display não impede o jogo
+### O que entender para explicar este código
 
-### Mostrar no código
+- **Cópia das regras:** `validateMove` cria uma cópia de TicTacToeRules (construtor de cópia) e aplica a casa recebida nela. Se algo não confere, a cópia é descartada e o estado real fica intacto. Só no fim `gameRules = candidateRules` torna o novo estado oficial.
+- **O que é comparado:** número esperado, casa dentro de 0..8 e vazia, as nove casas calculadas contra o `Tabuleiro` recebido e o `Resultado` contra vitória/empate calculados localmente.
+- **Numero e contador:** o contador interno conta jogadas aceitas; `Numero` é o valor antes da jogada. Por isso `createMove` usa contador menos um, e a primeira jogada tem Numero 0.
+- **placeMove:** verifica símbolo, posição, partida aberta, casa vazia e alternância de X/O antes de alterar o vetor. `hasWinningLine` testa 3 linhas, 3 colunas e 2 diagonais.
+- **Rejeição dos dois lados:** quem recebe uma jogada inválida envia `rejeicao` com motivo e `refazer: true`. Quem enviou guarda o estado anterior (`previousRules`), restaura e pede outra casa ao usuário. O contador não avança e o prazo de 120 s não reinicia.
+- **Confirmação implícita:** não há ACK por jogada; a próxima jogada válida do adversário confirma que a anterior foi aceita.
+- **Encerramento:** quem recebe a jogada final valida e envia `fim` (status `vitoria` com vencedor 1/2, ou `empate` com vencedor null); quem jogou confere e responde `confirmacao_fim`. Assim os dois mostram o mesmo resultado.
+- **Três níveis de JSON:** JsonUtil só converte texto ↔ Map/List; JsonMessages valida o pedido/resposta do match; GameMessages valida jogadas e controles. Parser próprio para não depender de bibliotecas externas.
+- **Diferença do enunciado:** o PDF sugere devolver a mesma mensagem quando a jogada é errada; a rejeição com motivo é decisão do projeto, não do professor.
 
-1. code/TcpGameSession.java, acceptOpponentMove: publicar somente depois de validar a jogada recebida.
-2. code/Display.java, openSocket: MulticastSocket, joinGroup, interface e TTL.
-3. publishMove: envelope, DatagramPacket, send e tratamento de IOException.
-4. main: receivePacket, validação do snapshot, descarte de mensagem inválida e showMove.
+Aprofundar: guia, seções 3.5, 3.6 e 3.9.
 
-### Fala-base
+## 06 — Multicast: uma publicação, vários displays (4:50–5:50)
 
-“Multicast permite publicar para um grupo que pode ter vários receptores. Os displays entram no grupo e recebem datagramas UDP. Não é aberta uma conexão TCP com cada Display.
+**Slide 6 — Multicast: uma publicação, vários observadores** (laranja)
 
-Nesta implementação, quem recebe e valida a jogada TCP publica essa jogada para os displays. Isso evita publicar tentativas rejeitadas. O envelope inclui o ID da partida e o tabuleiro completo, então cada atualização identifica a partida e permite acompanhar mesmo começando depois.
+- Grupo 225.1.1.21, porta 8821; datagramas UDP
+- Publica quem recebeu e validou a jogada: rejeições não aparecem
+- Envelope: partidaId + snapshot completo da jogada
+- Sem ACK: ausência de Display não impede o jogo
+- Datagrama inválido é descartado; escuta continua
 
-A partida não espera confirmação do Display. Se um Display for fechado, o jogo pode continuar. Se a publicação falhar, o jogador registra o problema e mantém a partida TCP. Já um pacote inválido no Display é descartado e a recepção continua.
+```json
+{"partidaId":"f413abe4-...","jogada":{"Numero":0,"Jogada":0,"Tabuleiro":[1,0,0,0,0,0,0,0,0],"Resultado":"jog"}}
+```
 
-Multicast não garante entrega, ordem ou ausência de duplicação. O próximo snapshot pode atualizar a visualização após uma perda, mas não recupera o histórico perdido e não há retransmissão.”
+| Tempo | Tela | Fala |
+| --- | --- | --- |
+| 4:50–5:05 | Slide 6 | "Multicast permite publicar para um grupo com vários receptores. Os displays entram no grupo e recebem datagramas UDP; não abro uma conexão com cada Display." |
+| 5:05–5:15 | [TcpGameSession.java:169](/home/thiago/Desktop/TicTacToeMulticast/code/TcpGameSession.java:169), acceptOpponentMove: chamada a publishMove após validar | "Quem recebe e valida a jogada é quem publica, então tentativas rejeitadas não aparecem nos displays." |
+| 5:15–5:27 | [Display.java:83](/home/thiago/Desktop/TicTacToeMulticast/code/Display.java:83), openSocket: SO_REUSEADDR, interface, TTL, joinGroup | "O socket multicast escolhe a interface de rede, limita o alcance com TTL e entra no grupo. Vários displays podem compartilhar a mesma porta." |
+| 5:27–5:39 | [Display.java:104](/home/thiago/Desktop/TicTacToeMulticast/code/Display.java:104), publishMove | "O envelope leva o ID da partida e o tabuleiro completo. Um Display que começa depois já mostra o estado atual." |
+| 5:39–5:50 | [Display.java:188](/home/thiago/Desktop/TicTacToeMulticast/code/Display.java:188), main e [showMove:220](/home/thiago/Desktop/TicTacToeMulticast/code/Display.java:220) | "O Display valida cada snapshot, descarta o que for inválido e mostra o ID e o tabuleiro. A partida não espera confirmação; multicast não garante entrega nem ordem. Cada canal tem limites; agora mostro onde o código reage às falhas." |
 
-### O que compreender antes de gravar
+### O que entender para explicar este código
 
-TCP, UDP e multicast usam sockets. Gameplay UDP não foi implementado, mas o multicast já utiliza UDP. A entrega multicast depende da rede; TTL não garante que os roteadores encaminhem o tráfego. Nos testes locais use lo/TTL0; nas VMs enX0/TTL1, sujeito à validação remota.
+- **Uma classe, dois usos:** o Player chama `Display.openPublisher` para publicar; o programa Display executa `main` para receber. Criar o publicador não executa o `main`.
+- **Grupo e porta:** 225.1.1.21:8821 (225.1.1.NN e 88NN, conforme o enunciado). Quem faz `joinGroup` passa a receber os datagramas enviados para esse grupo.
+- **Interface e TTL:** a interface diz por qual placa de rede operar (`lo` nos testes locais, `enX0` nas VMs). TTL limita quantos roteadores o pacote atravessa: 0 fica na máquina, 1 fica na rede local.
+- **Vários displays:** `SO_REUSEADDR` é configurado antes do `bind`, permitindo várias instâncias na mesma porta. O loopback multicast fica habilitado para receber na mesma máquina.
+- **Quem publica:** o jogador que recebeu e validou a jogada por TCP. Por isso o IP de origem mostrado pode ser o do adversário de quem jogou; quem identifica a partida é o `partidaId`.
+- **Snapshot:** cada mensagem tem o tabuleiro completo. Um Display que começa depois, ou que perdeu um pacote, se atualiza com o próximo.
+- **Validação no Display:** confere campos, tipos, contagem de X/O, última casa, vencedor e resultado de cada snapshot isolado. JSON, UTF-8 ou tamanho inválido → descarta com aviso e continua. Falha do próprio socket receptor encerra o Display.
+- **Falha na publicação:** erro ao abrir ou enviar gera aviso, fecha o publicador e desativa o multicast; a partida TCP continua.
+- **Limites:** sem ACK, sem reenvio, sem filtro de ordem ou duplicação. O jogo por UDP não foi implementado: o multicast usa UDP, mas a partida é TCP.
 
-Um snapshot antigo pode chegar depois de um novo: o Display não mantém histórico nem faz filtro de ordem. IDs identificam partidas intercaladas; não há menu de seleção. UUID e validação por IP não autenticam participantes.
+Aprofundar: guia, seção 3.7.
 
-Transição: “Essas separações determinam como cada tipo de falha afeta o sistema.”
+## 07 — Tolerância a falhas (5:50–7:30)
 
-## 6. Clipe 05 — tolerância a falhas no código
-
-### Slide 5: Falha, detecção e reação
-
-Use no slide apenas estas quatro linhas; mantenha a matriz completa como material de estudo.
+**Slide 7 — Falha → detecção → reação**
 
 | Situação | Reação |
 | --- | --- |
-| Sem par | Retorna TIMEOUT e remove o pedido |
-| Jogada inválida | Rejeita e solicita correção |
-| Adversário desconectado/inativo | Encerra com erro e libera recursos |
-| Display indisponível | Partida continua |
+| Sem par em 300 s | Remove o pedido e retorna TIMEOUT |
+| Pedido inválido ou duplicado | INVALID_REQUEST / DUPLICATE, sem entrar na fila |
+| Jogada inválida | Rejeita e pede correção; estado preservado |
+| Adversário desconectado ou 120 s sem resposta | Avisa quando possível, encerra e libera recursos |
+| Display ausente ou falha de publicação | Partida continua |
 
-### Fala-base
 
-“O tratamento de falhas varia conforme a função do componente. Sem adversário, o servidor limita a espera e remove o registro. Uma jogada inválida pode ser corrigida, mantendo o estado anterior. Se a conexão com o adversário falhar ou o prazo acabar, a sessão encerra e tenta avisar o outro lado quando possível.
+| Tempo | Tela | Fala |
+| --- | --- | --- |
+| 5:50–6:05 | [MatchServer.java:98](/home/thiago/Desktop/TicTacToeMulticast/code/MatchServer.java:98), getOponent, linhas 98–109: remainingNanoseconds, remoção da fila, createTimeoutResponse | "Sem par no prazo, removo o pedido e retorno TIMEOUT." |
+| 6:05–6:22 | [TcpGameSession.java:277](/home/thiago/Desktop/TicTacToeMulticast/code/TcpGameSession.java:277), readMessage, linhas 282–290; [ensureTimeRemaining:350](/home/thiago/Desktop/TicTacToeMulticast/code/TcpGameSession.java:350) | "A espera de resposta tem prazo. Leitura com -1 indica que o adversário fechou a conexão." |
+| 6:22–6:40 | [TcpGameSession.java:169](/home/thiago/Desktop/TicTacToeMulticast/code/TcpGameSession.java:169), acceptOpponentMove, linhas 178–190 | "Valido em uma cópia. Se a jogada é inválida, rejeito sem aceitar o estado e sem avançar o contador." |
+| 6:40–6:57 | [Display.java:104](/home/thiago/Desktop/TicTacToeMulticast/code/Display.java:104), publishMove, linhas 122–126; [openPublisher:49](/home/thiago/Desktop/TicTacToeMulticast/code/Display.java:49), linhas 57–67 | "Uma falha de publicação desativa o multicast, mas não encerra a partida TCP." |
+| 6:57–7:15 | [TcpGameSession.java:55](/home/thiago/Desktop/TicTacToeMulticast/code/TcpGameSession.java:55), play, linhas 74–86; [Player.java:98](/home/thiago/Desktop/TicTacToeMulticast/code/Player.java:98), linhas 98–105 | "Se a sessão falha, tento avisar o adversário, fecho os recursos e encerro. O aviso pode não chegar se a rede caiu." |
+| 7:15–7:30 | Slide 7 | "Não há reconexão, persistência da fila nem garantia de entrega aos displays. Vou provocar algumas dessas situações nos terminais." |
 
-A exibição é independente: perder um Display ou falhar a publicação multicast não deve derrubar a partida. Também validamos mensagens antes de modificar o estado.
+### O que entender para explicar este código
 
-Esses mecanismos evitam algumas esperas indefinidas e estados incorretos. Não implementam reconexão, recuperação da partida ou alta disponibilidade do servidor. Uma queda de rede pode impedir a entrega até da mensagem de encerramento.”
+- **Ideia geral:** cada falha tem três partes — onde é detectada, como o código reage e o que não é garantido. Explique sempre nessa ordem.
+- **Linhas 98–109 do MatchServer:** `remainingNanoseconds` é o tempo que falta até o prazo do pedido. Chegando a zero, o pedido é removido da fila e `createTimeoutResponse` monta o JSON de TIMEOUT.
+- **readMessage:** antes de cada leitura, `ensureTimeRemaining` calcula o tempo restante e configura `setSoTimeout`; se acabou, lança `SocketTimeoutException` (inatividade). `read()` devolvendo -1 significa que o outro lado fechou a conexão → `EOFException` (erro).
+- **acceptOpponentMove x readMessage:** jogada legível mas inválida → `acceptOpponentMove` envia rejeição e o jogo segue. JSON ilegível ou mensagem grande demais → `readMessage` lança IOException e a sessão encerra. A diferença é se dá para continuar com segurança.
+- **publishMove/openPublisher:** o `catch` de IOException avisa, fecha e desativa só o publicador; nada é propagado para a sessão TCP.
+- **play e Player:** os `catch` de `play` separam inatividade (SocketTimeoutException), erro de comunicação (IOException) e controle inválido (IllegalArgumentException). Cada um chama `sendFailureWhenPossible` com status `inatividade` ou `erro` e relança a exceção. O `finally` fecha o publicador; o try com recursos em Player.java fecha o socket da partida. O processo termina com saída 1.
+- **sendFailureWhenPossible:** tenta enviar `fim` com o motivo; se esse envio falhar, só registra "Não foi possível avisar o adversário", e a exceção original continua sendo relançada. Não há garantia de que o aviso chegue.
+- **Desconexão durante a digitação:** uma thread auxiliar lê o terminal enquanto a sessão continua observando a rede, por isso o jogador percebe a queda do adversário sem precisar digitar.
+- **O que não existe:** reconexão, retomada da partida, persistência ou réplica do MatchServer, ACK/reenvio no multicast. "Tolerância a falhas" aqui significa não travar indefinidamente, não aceitar estado errado e encerrar de forma controlada — não é autenticação nem criptografia.
 
-### Onde apontar no código durante a parte 5
+Aprofundar: guia, seção 5 e matriz 5.1.
 
-Os números abaixo foram conferidos em26/10/2026; podem mudar se o arquivo for editado. Use o nome do método para localizar. Os links abrem no início do trecho; amplie apenas as linhas citadas na coluna “destacar”. Em dois minutos, use os seis destaques da tabela seguinte; os detalhes extras são para estudo.
+## 08 — Demonstração e conclusão (7:30–10:00)
 
-| Tempo dentro da parte5 | Abrir e destacar | O que apontar com o cursor | Fala curta e texto na edição |
-| --- | --- | --- | --- |
-| 0:00–0:18 | [MatchServer.java:98](/home/thiago/Desktop/TicTacToeMulticast/code/MatchServer.java:98), getOponent, linhas98–109 | remainingNanoseconds, remoção da fila e createTimeoutResponse | “Se não houver par no prazo, removo o pedido e retorno TIMEOUT.” Texto: “Match: prazo padrão300s” |
-| 0:18–0:36 | [TcpGameSession.java:277](/home/thiago/Desktop/TicTacToeMulticast/code/TcpGameSession.java:277), readMessage, linhas282–290; depois [ensureTimeRemaining:350](/home/thiago/Desktop/TicTacToeMulticast/code/TcpGameSession.java:350) | Tempo restante, setSoTimeout e EOFException | “A espera de resposta tem prazo; leitura com -1 indica conexão encerrada.” Texto: “TCP: prazo e desconexão” |
-| 0:36–0:58 | [TcpGameSession.java:169](/home/thiago/Desktop/TicTacToeMulticast/code/TcpGameSession.java:169), acceptOpponentMove, linhas178–190 | validateMove antes de gameRules=candidateRules; rejeicao/refazer | “Valido em uma cópia. Se inválida, rejeito sem aceitar o estado.” Texto: “Estado e contador preservados” |
-| 0:58–1:18 | [Display.java:104](/home/thiago/Desktop/TicTacToeMulticast/code/Display.java:104), publishMove, linhas122–126; [openPublisher:49](/home/thiago/Desktop/TicTacToeMulticast/code/Display.java:49), linhas57–67 | catch de envio; aviso, close e retorno null na abertura | “Falha de publicação desativa o canal multicast, mas não encerra o TCP.” Texto: “Partida continua sem publicação” |
-| 1:18–1:40 | [TcpGameSession.java:74](/home/thiago/Desktop/TicTacToeMulticast/code/TcpGameSession.java:74), play, linhas74–86; [Player.java:98](/home/thiago/Desktop/TicTacToeMulticast/code/Player.java:98), linhas98–105 | Catch por inatividade/erro, finally e try com Socket | “Na falha da sessão, tento avisar, fecho recursos e encerro. O aviso pode não chegar.” Texto: “Encerramento controlado” |
-| 1:40–2:00 | Slide5 e a limitação correspondente | Mostrar a reação e uma linha de limite | “Não há reconexão, persistência da fila ou garantia de entrega multicast.” Texto: “Limites da implementação” |
+### Antes de gravar (fora do vídeo)
 
-O texto da tabela é a fala principal deste trecho. Use a fala-base anterior para estudar ou substituir palavras, sem ler as duas versões no vídeo: não caberiam em dois minutos.
+Na raiz do repositório, com JDK 17, portas 1199/5121/8821 livres e multicast local permitido. Comandos somente para localhost.
 
-Detalhes adicionais se o professor perguntar:
-
-- [Player.java:33](/home/thiago/Desktop/TicTacToeMulticast/code/Player.java:33): catch RemoteException e aviso de resultado desconhecido, sem repetição automática; linha43 trata serviço ausente.
-- [Player.java:60](/home/thiago/Desktop/TicTacToeMulticast/code/Player.java:60): try com ServerSocket e setSoTimeout no aceite. [openConnectionWithOpponent:128](/home/thiago/Desktop/TicTacToeMulticast/code/Player.java:128): IP esperado, connect com prazo e fechamento em falha.
-- [TcpGameSession.java:134](/home/thiago/Desktop/TicTacToeMulticast/code/TcpGameSession.java:134): quando a própria jogada é rejeitada, restaura previousRules e solicita outra entrada; não apenas imprime o erro.
-- [TcpGameSession.java:301](/home/thiago/Desktop/TicTacToeMulticast/code/TcpGameSession.java:301): limite de tamanho; linhas293–297 tratam JSON ilegível. O decoder UTF-8 estrito fica no construtor, linhas39–41.
-- [TcpGameSession.java:229](/home/thiago/Desktop/TicTacToeMulticast/code/TcpGameSession.java:229): observa a rede enquanto o usuário digita; linhas244–245 detectam EOF. Linhas255–268 tratam EOF e entrada inválida do terminal.
-- [Display.java:189](/home/thiago/Desktop/TicTacToeMulticast/code/Display.java:189): laço de recepção; linhas205–208 descartam datagramas inválidos sem parar o laço. Não confundir com falha do socket receptor, que encerra o Display.
-- [TcpGameSession.java:330](/home/thiago/Desktop/TicTacToeMulticast/code/TcpGameSession.java:330): sendFailureWhenPossible também trata falha ao enviar o aviso; não promete entregar o encerramento.
-
-Apresente como tratamento/tolerância a falhas. “Segurança” aqui não significa autenticação ou criptografia: verificação de IP, UUID e consistência de tabuleiro não oferecem essas garantias.
-
-### Matriz para estudar e responder ao professor
-
-| Falha | Onde detectar | Reação implementada | Limitação |
-| --- | --- | --- | --- |
-| Pedido malformado | JsonMessages/getOponent | INVALID_REQUEST; não enfileira | Não é autenticação |
-| Registro pendente duplicado | getOponent | DUPLICATE; mantém o original | Desistência não cancela imediatamente |
-| Ausência de par | timedWait e prazo | Remove pedido e retorna TIMEOUT | Depende de o servidor e a comunicação ainda funcionarem |
-| Registry/serviço indisponível | lookup/getOponent e exceções | Mensagem local, encerra tentativa sem retry | Resultado pode ser desconhecido se chamada já foi enviada |
-| Falha ao conectar/aceitar | connect/accept e prazo | Exceção, fechamento, saída1 | Não tenta outro oponente automaticamente |
-| Adversário fecha conexão | read retorna -1 ou IOException | Erro; aviso remoto quando possível | Não garante detecção instantânea de toda falha de rede |
-| Adversário sem resposta | Prazo absoluto e setSoTimeout | Encerra por inatividade | Não há garantia de prazo para todas as escritas |
-| Jogada inconsistente legível | GameMessages.validateMove | Rejeita; preserva estado e contador | Prazo original não reinicia |
-| JSON TCP ilegível/UTF-8 inválido/excessivo | readMessage e decoder | Encerra por erro | Não tenta continuar um fluxo inválido |
-| Entrada local inválida | readLocalMove | Pede nova entrada | EOF do terminal encerra por erro |
-| Publicador multicast indisponível | openPublisher/publishMove | Aviso e publicação desativada | Displays podem deixar de atualizar |
-| Datagrama inválido | Display.main/readPacket | Descarta e segue recebendo | Falha real do socket receptor encerra o Display |
-| Perda/reordenação multicast | Não há detecção completa | Próximo snapshot pode melhorar a visualização | Sem ACK, reenvio ou filtro de ordem |
-| Queda do MatchServer | Exceções nas chamadas; fila em memória | Clientes podem falhar; nova execução é necessária | Sem réplica/persistência; partida já conectada não depende de novas chamadas ao match |
-
-O enunciado pede tolerância a falhas de forma ampla; não afirmar que estes mecanismos esgotam a exigência ou foram individualmente aprovados pelo professor. Nosso controle separado de rejeição é uma diferença em relação ao exemplo de devolver a mesma mensagem sugerido no PDF. Explicar como decisão do projeto, sem atribuir a escolha ao professor.
-
-## 7. Clipe 06 — ordem de execução e resultados
-
-Esta parte tem160 segundos editados. Grave as cenas com calma e corte pausas de digitação; não acelere a leitura dos resultados. Plano sugerido:45s para vitória X/derrota O,35s para vitória O/derrota X,45s para empate,15s para fechar Display e20s para desconexão. Os últimos dois testes usam uma quarta partida; os três primeiros são partidas completas diferentes.
-
-### Preparação e ordem dos programas
-
-Objetivo: demonstrar três resultados normais e depois duas falhas. Pré-requisitos: JDK17 no PATH, portas1199/5121/8821 livres, fontes atuais e multicast local permitido. São quatro terminais; um quinto Display é opcional. Execute a partir da raiz do repositório.
-
-1. Compile uma vez antes de abrir os programas:
+1. Compilar:
 
 ```bash
 mkdir -p /tmp/tictactoe-video
 javac -encoding UTF-8 -d /tmp/tictactoe-video code/*.java
 ```
 
-2. Terminal1 — MatchServer; mantenha aberto durante todas as partidas:
+2. Terminal 1 — **Servidor de match** (fica aberto até o fim):
 
 ```bash
 env RMI_HOST=127.0.0.1 RMI_REGISTRY_PORT=1199 RMI_OBJECT_PORT=5121 RMI_SERVICE_NAME=MatchVideo MATCH_TIMEOUT_SECONDS=300 java -cp /tmp/tictactoe-video MatchServer
 ```
 
-Esperado: Registry127.0.0.1:1199, serviço MatchVideo e objeto remoto na porta5121. Falha: exceção de inicialização ou porta ocupada.
-
-3. Terminal2 — Display; mantenha aberto entre as partidas:
+3. Terminal 2 — **Display** (fica aberto entre as partidas; opcionalmente um segundo em outro terminal):
 
 ```bash
 env MULTICAST_GROUP=225.1.1.21 MULTICAST_PORT=8821 MULTICAST_INTERFACE=lo MULTICAST_TTL=0 java -cp /tmp/tictactoe-video Display
 ```
 
-Esperado: escuta no grupo pela interface lo. Pode repetir em um quinto terminal para demonstrar dois displays. Falha: erro de interface/configuração/socket ou ausência de atualização apesar de jogadas aceitas.
-
-4. Terminal3 — primeiro Player. Espere aparecer “Buscando adversário por RMI...” antes de iniciar o segundo:
+4. Comando do **Player**, usado no Terminal 3 (X) e depois no Terminal 4 (O) em cada partida. Inicie o Terminal 4 só depois de aparecer "Buscando adversário por RMI..." no Terminal 3:
 
 ```bash
 env -u PLAYER_IP -u PLAYER_PORT RMI_HOST=127.0.0.1 RMI_REGISTRY_PORT=1199 RMI_SERVICE_NAME=MatchVideo PLAYER_PROTOCOL=tcp MULTICAST_GROUP=225.1.1.21 MULTICAST_PORT=8821 MULTICAST_INTERFACE=lo MULTICAST_TTL=0 java -cp /tmp/tictactoe-video Player
 ```
 
-5. Terminal4 — execute exatamente o mesmo comando do passo4, antes de300s. Confira no texto de inicialização qual terminal usa X e qual usa O; as instruções abaixo seguem esses símbolos. Com o primeiro pedido já aguardando, Terminal3 será X e Terminal4 será O.
-
-Esperado nos Players: IP do hostname, portas atribuídas distintas, adversário encontrado, mesmo ID de partida e símbolos diferentes. O IP pode ser127.0.1.1 neste teste local; não exigir127.0.0.1. Para VMs, usar as envs reais do projeto, interface enX0 e TTL1; endereços127.x não servem entre máquinas. Estes comandos são somente para localhost.
-
-### Casas usadas nas tabelas
+Casas do tabuleiro (começam em 0). Cada entrada é seguida de Enter no terminal indicado; espere a pergunta de jogada antes da próxima.
 
 ```text
 0 | 1 | 2
@@ -281,11 +282,15 @@ Esperado nos Players: IP do hostname, portas atribuídas distintas, adversário 
 6 | 7 | 8
 ```
 
-Cada linha da tabela é uma entrada seguida de Enter no terminal indicado. Espere aparecer a pergunta de jogada antes da próxima entrada. Não cole toda a sequência em um único terminal. As casas começam em0, não em1.
+### 7:30–7:33 — Slide 8
 
-### Cena A — vitória de X e derrota de O
+**Slide 8 — Demonstração**: A vitória de X, B vitória de O, C empate, D Display fechado, E adversário desconectado. Etiquetas nos terminais: "Servidor de match", "Display", "Jogador X", "Jogador O".
 
-Na primeira vez que X pedir uma casa, você pode digitar abc e9 para mostrar correção local. Essas entradas não contam como jogada. Depois:
+### 7:33–8:08 — Cena A: vitória de X, derrota de O
+
+Fala: "Primeira partida. No X, digito uma entrada inválida e uma casa fora do intervalo: o terminal pede correção sem enviar nada. Agora X completa a linha superior."
+
+Iniciar Player no Terminal 3, depois no Terminal 4. No X, digitar `abc` e depois `9` na primeira jogada. Em seguida:
 
 | Ordem | Terminal | Digitar |
 | --- | --- | --- |
@@ -295,17 +300,13 @@ Na primeira vez que X pedir uma casa, você pode digitar abc e9 para mostrar cor
 | 4 | O | 4 |
 | 5 | X | 2 |
 
-```text
-X | X | X
-O | O | 5
-6 | 7 | 8
-```
+Esperado: X mostra "Partida encerrada: você venceu."; O mostra "Partida encerrada: você perdeu."; Display mostra vitória de X. Fala: "X vence, O perde, e o Display mostra o mesmo resultado."
 
-Esperado: X informa “Partida encerrada: você venceu.”; O informa “Partida encerrada: você perdeu.”; Display mostra vitória de X. Os dois Players terminam normalmente. No Canva, identifique os terminais e destaque as duas mensagens reais de resultado. Uma partida já demonstra vitória e derrota simultaneamente, uma em cada jogador.
+### 8:08–8:33 — Cena B: vitória de O, derrota de X
 
-### Cena B — vitória de O e derrota de X
+Fala: "Nova partida, outro ID. Agora O vence: quem inicia não tem vitória garantida."
 
-Reexecute o comando Player no Terminal3, espere a busca e depois reexecute no Terminal4. Não reinicie o MatchServer nem o Display. A nova partida deve mostrar outro ID.
+Reiniciar Player no Terminal 3, depois no 4. Não reiniciar servidor nem Display.
 
 | Ordem | Terminal | Digitar |
 | --- | --- | --- |
@@ -316,17 +317,13 @@ Reexecute o comando Player no Terminal3, espere a busca e depois reexecute no Te
 | 5 | X | 8 |
 | 6 | O | 5 |
 
-```text
-X | X | 2
-O | O | O
-6 | 7 | X
-```
+Esperado: O vence, X perde, Display mostra vitória de O.
 
-Esperado: O informa vitória; X informa derrota; Display mostra vitória de O. Ambos terminam normalmente. Esta cena mostra que quem inicia não recebe uma vitória predeterminada.
+### 8:33–9:08 — Cena C: empate
 
-### Cena C — empate
+Fala: "Terceira partida: as nove casas ocupadas e empate nos dois lados e no Display."
 
-Inicie outra vez os dois Players, na mesma ordem e com os mesmos comandos. Não reutilize processos que já encerraram.
+Reiniciar os dois Players na mesma ordem.
 
 | Ordem | Terminal | Digitar |
 | --- | --- | --- |
@@ -340,108 +337,24 @@ Inicie outra vez os dois Players, na mesma ordem e com os mesmos comandos. Não 
 | 8 | O | 6 |
 | 9 | X | 8 |
 
-```text
-X | O | X
-X | O | O
-O | X | X
-```
+Esperado: ambos mostram "Partida encerrada: empate."; Display mostra empate.
 
-Esperado: nove casas ocupadas, nenhuma linha vencedora, ambos mostram “Partida encerrada: empate.” e o Display mostra empate. Ambos terminam normalmente.
+### 9:08–9:23 — Cena D: fechar o Display
 
-### Cena D — fechar Display sem interromper a partida
+Fala: "Na quarta partida fecho o Display. A partida continua, porque não espera confirmação."
 
-Inicie uma quarta partida com os mesmos comandos. Faça X0 e O3. Feche apenas o Display com Ctrl+C; depois faça X1 e confira a atualização nos Players. Esperado: a partida continua. Se abriu dois displays, feche um e mostre o outro recebendo.
+Reiniciar os dois Players. Jogar X `0`, O `3`. Fechar o Display com Ctrl+C. Jogar X `1`. Esperado: os Players continuam normalmente. Não encerrar esta partida; ela é usada na cena E.
 
-Não é preciso concluir esta partida. Use a mesma conexão para a próxima cena. Texto na edição: “Display encerrado; comunicação TCP continua”. Fechar um receptor não provoca necessariamente erro no envio UDP; não apresente essa cena como prova de catch de envio.
+### 9:23–9:40 — Cena E: adversário desconectado
 
-### Cena E — desconexão do adversário
+Fala: "Agora encerro o Jogador X. O percebe a desconexão e encerra com erro, sem declarar vitória."
 
-Depois de X1, O estará escolhendo sua jogada e X aguardando resposta. Pressione Ctrl+C em X e grave a reação de O. Esperado: O percebe desconexão/erro e encerra, inclusive durante a escolha humana; não deve declarar vitória normal. A redação da exceção pode variar. Texto na edição: “Adversário desconectado → encerramento controlado”.
+Com O escolhendo a jogada, pressionar Ctrl+C no Terminal 3 (X). Esperado: O detecta a desconexão e encerra com erro. Depois, encerrar o servidor com Ctrl+C.
 
-Ao terminar, encerre o MatchServer com Ctrl+C e qualquer Display restante. Não deixe jogadores esperando match após a gravação.
+### 9:40–10:00 — Encerramento
 
-### O que conta como evidência
+Sem slide: mantenha o último terminal (ou o slide 8) na tela durante a fala final.
 
-Sinais de falha nas partidas normais: casa divergente, bloqueio sem reação, resultado diferente nos terminais, erro de conexão ou ausência da confirmação final. Se ocorrer, registre e investigue antes de regravar. Entrada abc/9 demonstra validação do teclado, não rejeição de JSON remoto.
+Fala: "Vimos os três resultados normais e o comportamento quando o Display some e quando o adversário desconecta. O pareamento usa RMI, a partida usa TCP e a exibição usa multicast, cada um com seu tratamento de falhas. Não há reconexão nem garantia de entrega aos displays, e o jogo por UDP não foi implementado. A próxima etapa é validar o sistema completo nas VMs com a mesma versão dos fontes."
 
-As sequências foram conferidas por análise dos tabuleiros; este ajuste de roteiro não executou novas partidas. Há testes históricos de vitória X, vitória O e empate, mas a alteração mais recente de IP repetiu apenas vitória X e entradas inválidas. Reexecute e grave as três partidas com os fontes atuais. Não apresentar testes locais como resultados nas VMs.
-
-Para timeout, opcionalmente grave os120s/300s reais em material extra. Se cortar ou acelerar a espera, indique “espera reduzida na edição” e o tempo real transcorrido. Não altere o padrão do código só para caber no vídeo.
-
-## 8. Edição no Canva — identificação, cortes e transições
-
-As sugestões visuais abaixo são escolhas para sua gravação, não exigências do professor. O Canva oferece corte, divisão e organização de clipes na linha do tempo e transições entre trechos; os controles podem variar conforme a versão do editor. Referências oficiais: [edição de vídeos](https://www.canva.com/help/creating-and-editing-videos/) e [cortar e dividir vídeos](https://www.canva.com/features/video-trimmer/).
-
-### Identidade visual que acompanha a fala
-
-Use formato horizontal16:9, de preferência1920×1080. Grave o editor e terminais nessa proporção, com fonte ampliada. Priorize legibilidade do código; as legendas e sua câmera, se usada, não devem cobrir os trechos destacados.
-
-| Elemento | Texto ou aparência sugerida | Quando usar |
-| --- | --- | --- |
-| Identificação de capítulo | “02/06 · RMI — pareamento” no canto superior | Primeiro3s de cada parte; reaparecer discretamente após corte longo |
-| Nome do arquivo/método | “MatchServer.java · getOponent” | Durante cada trecho de código |
-| Cor por comunicação | Azul para RMI, verde para TCP, laranja para multicast | Mesmas cores nos slides e rótulos; sempre acompanhar com texto |
-| Etiqueta dos terminais | “Servidor de match”, “Jogador X”, “Jogador O”, “Display” | Durante toda a demonstração relevante |
-| Destaque de código | Retângulo com contorno ou seta, sem esconder as letras | Uma operação por vez, sincronizada com a frase |
-| Resumo da falha | “Sem par → TIMEOUT” ou “Jogada inválida → refazer” | Durante o catch/condicional correspondente |
-| Identificação do cenário | “Teste1 · vitória X / derrota O”, “Teste2 · vitória O”, “Teste3 · empate” | No começo de cada partida, por2–3s |
-| Resultado | Contorno nas mensagens reais dos dois Players | Segurar a imagem por2–3s, sem substituir o terminal por resultado inventado |
-| Indicação de edição temporal | “Digitação acelerada” ou “Espera reduzida na edição:120s reais” | Sempre que acelerar ou cortar uma espera que esteja sendo avaliada |
-
-No Canva, adicione esses rótulos como elementos de texto sobre o clipe e ajuste a duração de cada elemento na linha do tempo ao trecho da fala. Duplique os rótulos para manter posição, fonte e tamanho. Para focar no código, use um recorte ampliado da própria gravação em outro trecho; evite ampliar tanto que fique pixelado. Contorno e seta devem apontar o código real, não encobri-lo.
-
-### Transições prontas, com fala e imagem
-
-| Mudança | Frase de ligação | O que mostrar na edição |
-| --- | --- | --- |
-| Arquitetura → RMI | “Primeiro, os jogadores precisam encontrar um adversário.” | Dissolução curta para Slide2, título “02/06 · RMI” |
-| RMI → TCP | “Agora cada jogador conhece o endereço do outro; a partida segue diretamente por TCP.” | Destacar Player↔Player no slide de arquitetura, depois corte para openConnectionWithOpponent |
-| TCP → multicast | “A partida já funciona entre os jogadores. Para acompanhar de fora, usamos multicast.” | Mostrar rótulo “04/06 · Multicast” e depois joinGroup/publicação |
-| Multicast → falhas | “Cada canal tem limites. Agora vou mostrar onde o código reage às falhas.” | Dissolução curta para Slide5, depois corte para o primeiro bloco de código |
-| Falhas → demonstração | “Vou provocar algumas dessas situações e mostrar o comportamento nos terminais.” | Título “06/06 · Demonstração”; iniciar captura com terminais identificados |
-| Vitória X → vitória O → empate | “Agora vou iniciar uma nova partida para mostrar outro resultado.” | Corte direto, rótulo do teste e novo ID visível; não repetir abertura do servidor |
-| Demonstração → fim | “Assim, vimos os resultados normais e o encerramento quando o adversário desconecta.” | Manter o resultado real final por2s e terminar; não criar clipe7 |
-
-Use corte direto entre slide e código dentro de um tema. Nas mudanças de tema, uma dissolução curta de aproximadamente0,3–0,5s é suficiente. Esses tempos já entram na meta de10 minutos; não acrescente vinhetas longas. Evite animações de digitação e transições com giro, que dificultam acompanhar o código.
-
-### Plano de montagem, parte por parte
-
-| Parte | Ordem das imagens | Texto que deve acompanhar |
-| --- | --- | --- |
-| 1 | Slide de arquitetura | Título, nome e três programas; sem introdução longa |
-| 2 | Slide2 → MatchService → export/Registry → lookup → fila | “Contrato”, “Registro do serviço”, “Chamada remota”, “Pareamento” |
-| 3 | Slide3 → endereço/porta → connect/accept → envio → validação | “IP local”, “Porta escolhida pelo sistema”, “Conexão TCP”, “JSON por linha” |
-| 4 | Slide4 → joinGroup → publishMove → Display | “Grupo multicast”, “Jogada aceita”, “Vários receptores” |
-| 5 | Blocos indicados no mapa de código | Falha → detecção → reação; um destaque de cada vez |
-| 6 | Vitória X → vitória O → empate → fechar Display → desconectar jogador | Número do teste, jogador e mensagem real observada |
-
-### Passo a passo da edição
-
-1. Grave seis clipes principais, nomeados 01_arquitetura até06_demo. Grave testes como arquivos separados para poder reordenar e cortar sem refazer a explicação.
-2. Crie um projeto de vídeo horizontal no Canva e importe os clipes, as imagens dos slides e eventuais recortes de código. Coloque-os na linha do tempo na ordem da tabela inicial.
-3. Corte silêncios e erros de fala nas bordas; divida um clipe quando precisar inserir slide ou outra captura. Preserve a ordem causal de cada teste: ação, detecção e reação.
-4. Insira títulos e rótulos; ajuste sua duração para coincidir com a fala. No código, mantenha método e linhas relevantes visíveis enquanto a explicação acontece.
-5. Acrescente transições só nas mudanças de assunto. Entre duas ações do mesmo teste, prefira corte direto e sinalize quando houver passagem de tempo.
-6. Se usar legendas, revise os termos RMI, TCP, multicast, getOponent e nomes de métodos. Posicione-as fora da área de código e dos resultados. Podem ser textos curtos inseridos manualmente; não dependa de recurso automático para concluir a edição.
-7. Equilibre o áudio dos clipes. Prefira sem música; se usar, mantenha muito baixa e sem competir com a fala. Evite sons em cada aparição de código.
-8. Assista em tela cheia e confira se o texto permanece legível sem pausar. Revise a duração total, os três resultados e a correspondência entre a fala e o trecho mostrado. Exporte na melhor resolução disponível compatível com a captura e confira o arquivo exportado.
-
-Evite afirmar “o sistema nunca trava”, “TCP garante que o programa processou a jogada” ou “o Display sempre fica atualizado”. Os limites estão explicados na parte5; não precisam de uma seção final separada.
-
-## 9. Perguntas para ensaiar
-
-| Pergunta | Resposta que você deve conseguir explicar |
-| --- | --- |
-| Por que RMI? | É o mecanismo do serviço de pareamento; permite invocar getOponent remotamente pelo contrato compartilhado |
-| Registry recebe as jogadas? | Não; localiza o serviço. Depois do match, jogadores comunicam por TCP |
-| Por que não só TCP para tudo? | O trabalho separa funções: RMI no match, socket direto na partida e multicast na exibição |
-| Por que InetSocketAddress? | Representa IP/porta para bind e connect com timeout; quem comunica é o socket |
-| Quem escolhe a porta? | O sistema ao receber0; o Player mantém o ServerSocket aberto e anuncia getLocalPort |
-| TCP já valida a jogada? | Não; entrega dados em ordem na conexão. As regras e o protocolo validam o conteúdo |
-| Por que quebra de linha? | Para delimitar um JSON dentro do fluxo TCP |
-| Por que cópia do tabuleiro? | Para validar uma tentativa antes de aceitar seu estado e permitir desfazer rejeições |
-| Como vários displays recebem? | Entram no mesmo grupo/porta multicast; o publicador não abre uma conexão por Display |
-| O jogo funciona sem Display? | Sim; não espera ACK e trata falhas de publicação separadamente |
-| O que acontece se o match cair? | Chamadas pendentes podem falhar e a fila em memória se perde; partidas TCP já estabelecidas não dependem de novas chamadas ao match |
-| A partida se recupera de queda? | Não; encerra com erro/inatividade, tenta avisar e fecha recursos |
-| Como foi testada a tolerância? | Relacionar cada cena real à falha provocada, à detecção e à reação; separar testes locais e remotos |
+Se a demonstração nas VMs já tiver sido gravada, troque a última frase pelo resultado real observado. Não apresentar testes locais como resultados nas VMs.

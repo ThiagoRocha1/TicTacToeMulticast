@@ -257,7 +257,7 @@ Atualizar Display.java e TcpGameSession.java nas duas VMs jogadoras e recompilar
 
 ## Guia para estudo e vídeo
 
-[GUIA_DE_APRESENTACAO.md](GUIA_DE_APRESENTACAO.md) explica os nove fontes Java, os fluxos RMI/TCP/multicast, métodos principais, mensagens e limites da implementação. Inclui roteiro de10 minutos e demonstração manual. Preparado em26/10/2026; não representa nova execução dos testes, gravação ou publicação Web.
+[GUIA_DE_APRESENTACAO.md](GUIA_DE_APRESENTACAO.md) explica os nove fontes Java, os fluxos RMI/TCP/multicast, métodos principais, mensagens e limites da implementação. O roteiro de10 minutos e a demonstração ficam em ROTEIRO_DO_VIDEO.md. Preparado em26/10/2026; não representa nova execução dos testes, gravação ou publicação Web.
 
 ## Encerramento RMI sem classe interna de tarefa
 
@@ -269,6 +269,6 @@ Player usa InetAddress.getLocalHost() quando PLAYER_IP está ausente. Reserva a 
 
 getLocalHost() depende da resolução do nome da máquina: pode retornar127.0.1.1, que serve somente para testes na mesma máquina. Nas VMs, conferir o IP exibido antes do teste remoto; corrigir a resolução do nome ou usar PLAYER_IP com endereço alcançável se necessário. Porta automática e PLAYER_PORT opcional preservados. Caso23 em TESTES_MANUAIS.md registra o teste desta alteração; evidências antigas de descoberta por rota são históricas.
 
-## Roteiro de gravação por comunicação e falhas
+## Apresentação e roteiro do vídeo
 
-[ROTEIRO_DO_VIDEO.md](ROTEIRO_DO_VIDEO.md) organiza aproximadamente10 minutos em seis clipes, com conteúdo de cinco slides, fala-base e pontos do código para RMI, TCP e multicast. Inclui matriz de falhas, cenas de demonstração e limites da implementação. É material de preparação; não representa vídeo gravado nem execução de novos testes.
+[ROTEIRO_DO_VIDEO.md](ROTEIRO_DO_VIDEO.md) unifica a estrutura de slides e o roteiro do vídeo: aproximadamente10 minutos em oito segmentos e oito slides, cada slide correspondente ao segmento de mesmo número. Em cada segmento, tempo, tela (slide ou código) e fala aparecem juntos; o segmento 08 traz comandos, jogadas e fala de cada cena da demonstração. Matriz de falhas e perguntas ficam no guia. É material de preparação; não representa vídeo gravado nem execução de novos testes.
