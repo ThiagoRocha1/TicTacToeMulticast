@@ -188,7 +188,7 @@ Compilação e verificação manual: caso 13 de `TESTES_MANUAIS.md`.
 
 O responsável confirmou expressamente a proposta TCP nesta conversa. São escolhas do projeto, complementares ao PDF:
 
-- Ambos reservam o endereço TCP antes de chamar RMI. Por pedido posterior do responsável, PLAYER_IP e PLAYER_PORT são opcionais: sem eles, Player obtém o IP local de uma conexão TCP ao Registry e reserva uma porta livre com bind na porta 0; anuncia a porta real, mantendo a escuta aberta. Overrides manuais continuam disponíveis (PLAYER_PORT=0 também seleciona automaticamente). Quem recebe inicia=true conecta e usa X; o outro aceita e usa O. Aceite/conexão limitados a 120 s, sem reconexão automática. O IP da conexão aceita deve coincidir com o adversário retornado pelo match.
+- Ambos reservam o endereço TCP antes de chamar RMI. Por pedido posterior do responsável, PLAYER_IP e PLAYER_PORT são opcionais: sem eles, Player obtém o IP por InetAddress.getLocalHost() e reserva uma porta livre com ServerSocket(0); anuncia a porta real, mantendo a escuta aberta. Overrides manuais continuam disponíveis (PLAYER_PORT=0 também seleciona automaticamente). Quem recebe inicia=true conecta e usa X; o outro aceita e usa O. Aceite/conexão limitados a 120 s, sem reconexão automática. O IP da conexão aceita deve coincidir com o adversário retornado pelo match.
 - UTF-8, um objeto JSON por linha, no máximo 16384 unidades UTF-16 por mensagem. Codificação inválida, JSON ilegível ou mensagem excessiva encerram por erro; jogada legível com dados inválidos recebe rejeição e pode ser corrigida. A leitura usa um prazo absoluto, inclusive durante mensagens incompletas.
 - O iniciador gera um UUID e envia `{"evento":"inicio","partidaId":"UUID"}` antes da primeira jogada. O JSON RMI permanece inalterado.
 - Jogadas usam exatamente Numero, Jogada, Tabuleiro, Resultado. Numero é o índice global antes de aplicar a jogada; Tabuleiro é posterior à jogada; Resultado é do emissor. Esta implementação envia jog, vit ou emp; der permanece reservado no vocabulário do professor, mas não representa uma jogada válida própria neste fluxo.
@@ -203,7 +203,7 @@ Na pasta única ~/tictactoe da VM .14: MatchServer.java, MatchService.java, Json
 
 Na pasta ~/tictactoe de cada VM jogadora (.16 e .17): Player.java, MatchService.java, JsonMessages.java, JsonUtil.java, TicTacToeRules.java, GameMessages.java, TcpGameSession.java, Display.java e a configuração .env daquele jogador. Display.java pode ficar na mesma pasta e executar em outro terminal de cada jogador.
 
-Recompilar com `javac -encoding UTF-8 *.java` em cada máquina. Iniciar `java -cp . MatchServer` na .14 e depois `java -cp . Player` na .16 e .17. PLAYER_IP e PLAYER_PORT não são obrigatórios; a descoberta usa a rota até o Registry e uma porta atribuída pelo Linux. O adversário precisa conseguir alcançar esse IP e a porta atribuída. Em redes com NAT, múltiplas rotas ou firewall restritivo, a descoberta não garante conectividade; os overrides permitem selecionar endereço local e porta fixa. Roteiro completo e resultados esperados no caso 14 de TESTES_MANUAIS.md. Não executar processos antigos com arquivos novos.
+Recompilar com `javac -encoding UTF-8 *.java` em cada máquina. Iniciar `java -cp . MatchServer` na .14 e depois `java -cp . Player` na .16 e .17. PLAYER_IP e PLAYER_PORT não são obrigatórios; a identificação usa InetAddress.getLocalHost() e uma porta atribuída pelo Linux. O adversário precisa conseguir alcançar esse IP e a porta atribuída. Em redes com NAT, múltiplas rotas ou firewall restritivo, a descoberta não garante conectividade; os overrides permitem selecionar endereço local e porta fixa. Roteiro completo e resultados esperados no caso 14 de TESTES_MANUAIS.md. Não executar processos antigos com arquivos novos.
 
 Por decisão mais recente do responsável, TcpGameSession permanece em code/TcpGameSession.java, separado de Player.java. Distribuir ambos aos jogadores e compilar juntos com os demais fontes; executar Player normalmente.
 
@@ -230,7 +230,7 @@ Nas VMs jogadoras, acrescentar ao .env `MULTICAST_INTERFACE` com o nome real da 
 
 ## Descoberta automática do endereço do jogador
 
-Pedido do responsável: iniciar sem configurar IP/porta de cada jogador. Player abre uma conexão TCP curta ao Registry para obter o IP local escolhido pelo sistema, fecha essa conexão e reserva a escuta TCP na porta 0. getLocalPort informa a porta real, enviada no JSON RMI existente. Não há varredura de portas nem alteração do contrato de match. Sem Registry acessível, a descoberta falha com mensagem contextual; não há registro/retry automático.
+Pedido do responsável: iniciar sem configurar IP/porta de cada jogador. Por pedido posterior do responsável, Player usa InetAddress.getLocalHost() e reserva a escuta com ServerSocket(0), sem socket de descoberta nem enumeração de interfaces. getLocalPort informa a porta real, enviada no JSON RMI existente. Não há varredura de portas nem alteração do contrato de match. Falha na resolução do nome local gera IOException; Registry indisponível falha depois, na consulta RMI. Não há nova tentativa automática.
 
 Nas VMs .16 e .17, o mesmo conteúdo pode ser usado em ~/tictactoe/.env:
 
@@ -262,3 +262,9 @@ Atualizar Display.java e TcpGameSession.java nas duas VMs jogadoras e recompilar
 ## Encerramento RMI sem classe interna de tarefa
 
 Por pedido do responsável, ServerShutdown foi removida. MatchServer implementa Runnable e registra new Thread(matchServer) como shutdown hook; run delega ao método shutdownServer, que libera Registry e objeto remoto. Sem lambda nem classe anônima. PendingMatchRequest permanece como registro de estado. Revisão das outras classes internas e justificativas no guia de apresentação.
+
+## IP local sem conexão de descoberta
+
+Player usa InetAddress.getLocalHost() quando PLAYER_IP está ausente. Reserva a porta com new ServerSocket(localPlayerRequestedPort), sendo 0 o padrão; getLocalPort() informa a porta real. A escuta aceita conexões nas interfaces locais. O socket de saída é associado ao IP anunciado antes de connect, preservando a validação do IP do adversário e o timeout120s. RMI continua responsável pelo pareamento.
+
+getLocalHost() depende da resolução do nome da máquina: pode retornar127.0.1.1, que serve somente para testes na mesma máquina. Nas VMs, conferir o IP exibido antes do teste remoto; corrigir a resolução do nome ou usar PLAYER_IP com endereço alcançável se necessário. Porta automática e PLAYER_PORT opcional preservados. Caso23 em TESTES_MANUAIS.md registra o teste desta alteração; evidências antigas de descoberta por rota são históricas.

@@ -95,7 +95,7 @@ As decisões de partida TCP anteriormente listadas foram aprovadas expressamente
 
 O responsável confirmou expressamente a proposta TCP nesta conversa. São escolhas do projeto, complementares ao PDF:
 
-- Ambos reservam o endereço TCP antes de chamar RMI. Por pedido posterior do responsável, PLAYER_IP e PLAYER_PORT são opcionais: sem eles, Player obtém o IP local de uma conexão TCP ao Registry e reserva uma porta livre com bind na porta 0; anuncia a porta real, mantendo a escuta aberta. Overrides manuais continuam disponíveis (PLAYER_PORT=0 também seleciona automaticamente). Quem recebe inicia=true conecta e usa X; o outro aceita e usa O. Aceite/conexão limitados a 120 s, sem reconexão automática. O IP da conexão aceita deve coincidir com o adversário retornado pelo match.
+- Ambos reservam o endereço TCP antes de chamar RMI. Por pedido posterior do responsável, PLAYER_IP e PLAYER_PORT são opcionais: sem eles, Player obtém o IP por InetAddress.getLocalHost() e reserva uma porta livre com ServerSocket(0); anuncia a porta real, mantendo a escuta aberta. Overrides manuais continuam disponíveis (PLAYER_PORT=0 também seleciona automaticamente). Quem recebe inicia=true conecta e usa X; o outro aceita e usa O. Aceite/conexão limitados a 120 s, sem reconexão automática. O IP da conexão aceita deve coincidir com o adversário retornado pelo match.
 - UTF-8, um objeto JSON por linha, no máximo 16384 unidades UTF-16 por mensagem. Codificação inválida, JSON ilegível ou mensagem excessiva encerram por erro; jogada legível com dados inválidos recebe rejeição e pode ser corrigida. A leitura usa um prazo absoluto, inclusive durante mensagens incompletas.
 - O iniciador gera um UUID e envia `{"evento":"inicio","partidaId":"UUID"}` antes da primeira jogada. O JSON RMI permanece inalterado.
 - Jogadas usam exatamente Numero, Jogada, Tabuleiro, Resultado. Numero é o índice global antes de aplicar a jogada; Tabuleiro é posterior à jogada; Resultado é do emissor. Esta implementação envia jog, vit ou emp; der permanece reservado no vocabulário do professor, mas não representa uma jogada válida própria neste fluxo.
@@ -202,7 +202,7 @@ Se outro padrão observado no exemplo parecer incorreto, ambíguo ou contrariar 
 
 ## Descoberta de endpoint aprovada posteriormente
 
-O responsável pediu dispensar a configuração manual de IP/porta do jogador. Player usa o IP local de uma conexão TCP ao Registry e bind TCP na porta 0; informa a porta atribuída ao match, mantendo o socket reservado. PLAYER_IP/PLAYER_PORT opcionais preservam testes e redes com porta fixa; 0 seleciona porta automática. Não alterar a assinatura/JSON RMI. MULTICAST_INTERFACE continua explícita (enX0 informado para as três VMs). Descoberta não configura firewall/NAT nem comprova alcance entre jogadores. Caso20 manual; localhost passou, VMs pendentes.
+O responsável pediu dispensar a configuração manual de IP/porta do jogador. Por pedido posterior, Player usa InetAddress.getLocalHost() e ServerSocket(0); informa a porta atribuída ao match, mantendo o socket reservado. PLAYER_IP/PLAYER_PORT opcionais preservam testes e redes com porta fixa; 0 seleciona porta automática. Não alterar a assinatura/JSON RMI. MULTICAST_INTERFACE continua explícita (enX0 informado para as três VMs). Descoberta não configura firewall/NAT nem comprova alcance entre jogadores. Caso20 manual; localhost passou, VMs pendentes.
 
 ## Identificação de partida no Display — alteração aprovada
 
@@ -217,3 +217,7 @@ Em26/10/2026, o responsável pediu substituir a classe interna de encerramento d
 ## Timeout sem teto explícito
 
 Pedido posterior26/10/2026: remover comparação com limite máximo em readMatchTimeoutSeconds. Preservar positividade, padrão300s e mensagens de configuração. Duration.toNanos pode falhar por limite de representação; tratar essa conversão como erro de configuração, sem inventar teto de negócio.
+
+## Identificação local simplificada aprovada em 26/10/2026
+
+Pedido posterior substitui a descoberta por conexão ao Registry: sem PLAYER_IP, usar InetAddress.getLocalHost(); sem PLAYER_PORT, usar new ServerSocket(0). Overrides permanecem disponíveis. Escuta agora nas interfaces locais, sem bind explícito ao IP anunciado. Para preservar a verificação de IP do adversário, o socket de saída faz bind no IP anunciado com porta 0 antes de connect com timeout120s. A porta de origem da conexão não precisa coincidir com a porta de escuta. Não reintroduzir socket de descoberta sem pedido. getLocalHost depende da resolução do hostname e pode retornar loopback; para VMs, verificar o endereço anunciado e ajustar a resolução local ou PLAYER_IP se necessário. Teste local revelou origem127.0.0.1 versus anúncio127.0.1.1; corrigido pelo bind de saída. Compilação e vitória X com entrada inválida passaram; VMs e novos testes de prazo120s pendentes nesta etapa.

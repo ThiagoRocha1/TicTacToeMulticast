@@ -708,3 +708,18 @@ MATCH_TIMEOUT_SECONDS=9223372036854775807 RMI_OBJECT_PORT=5121 java -cp /tmp/tic
 ```
 
 Esperado: erro contextual de representação em nanossegundos e saída1, sem stack trace não tratado. Não existe mais comparação explícita com limite máximo na leitura. Executado e passou. Não esperar um prazo dessa duração real. Timeout padrão permanece300s; partida completa, espera real e VMs não reexecutadas nesta alteração.
+
+## Caso 23 — IP pelo hostname e porta atribuída pelo sistema
+
+Objetivo: validar obtenção local sem socket de descoberta, pareamento e partida TCP. Pré-requisitos: JDK17, pasta do repositório, portas locais1199/5121 livres. Os comandos usam java/javac no PATH.
+
+1. Compilar: `mkdir -p /tmp/tictactoe-simple-address` e `javac -encoding UTF-8 -d /tmp/tictactoe-simple-address code/*.java`.
+2. Terminal servidor: `env RMI_HOST=127.0.0.1 RMI_REGISTRY_PORT=1199 RMI_OBJECT_PORT=5121 RMI_SERVICE_NAME=MatchSimpleAddress MATCH_TIMEOUT_SECONDS=300 java -cp /tmp/tictactoe-simple-address MatchServer`.
+3. Terminal jogador X: `env -u PLAYER_IP -u PLAYER_PORT RMI_HOST=127.0.0.1 RMI_REGISTRY_PORT=1199 RMI_SERVICE_NAME=MatchSimpleAddress MULTICAST_INTERFACE=lo MULTICAST_TTL=0 java -cp /tmp/tictactoe-simple-address Player`.
+4. Terminal jogador O: repetir o comando do passo3 em outro terminal.
+5. Em X, digitar abc,9 e0 em linhas separadas; em O,3; X,1; O,4; X,2.
+6. Encerrar o servidor com Ctrl+C após os jogadores terminarem.
+
+Esperado por terminal: servidor registra serviço; jogadores anunciam IP local e portas distintas, X informa número inválido e casa fora do intervalo, depois vitória; O mostra derrota. Ambos terminam com saída0. Sinais de falha: IP divergente, erro de conexão, tabuleiros diferentes ou ausência do resultado. Para provocar falha de resolução, usar PLAYER_IP=nome-inexistente.invalid em um jogador; esperado erro local e saída1, sem registro de match. Essa provocação **não executada** nesta etapa. Para provocar falha de rede, encerrar um jogador durante a partida; repetição **não executada** nesta etapa.
+
+Execução26/10/2026: compilação **passou**. Primeira partida **falhou** por anúncio127.0.1.1 e origem127.0.0.1. Após bind da saída no IP anunciado, repetição **passou** com portas46557/38065 e sequência acima. VMs, timeout real120s e Display **não executados** nesta etapa. Nas VMs, endereço127.x não é adequado; verificar resolução do hostname ou usar PLAYER_IP com IP alcançável.

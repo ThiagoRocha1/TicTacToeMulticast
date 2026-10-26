@@ -55,10 +55,9 @@ public class Player {
         }
 
         int localPlayerRequestedPort = readLocalPlayerRequestedPort();
-        InetAddress localPlayerAddress = discoverLocalPlayerAddress(rmiRegistryHost, rmiRegistryPort);
+        InetAddress localPlayerAddress = readLocalPlayerAddress();
 
-        try (ServerSocket localPlayerListeningSocket = new ServerSocket()) {
-            localPlayerListeningSocket.bind(new InetSocketAddress(localPlayerAddress, localPlayerRequestedPort));
+        try (ServerSocket localPlayerListeningSocket = new ServerSocket(localPlayerRequestedPort)) {
             localPlayerListeningSocket.setSoTimeout(CONNECTION_TIMEOUT_MILLIS);
 
             Map localPlayerMatchRequest = new HashMap();
@@ -97,7 +96,7 @@ public class Player {
             System.out.println("Oponente encontrado: " + opponentIpAddress + ":" + opponentListeningPort);
 
             try (Socket opponentConnectionSocket = openConnectionWithOpponent(localPlayerListeningSocket,
-                    opponentIpAddress, opponentListeningPort, localPlayerStartsMatch)) {
+                    localPlayerAddress, opponentIpAddress, opponentListeningPort, localPlayerStartsMatch)) {
                 localPlayerListeningSocket.close();
 
                 TcpGameSession gameSession = new TcpGameSession(opponentConnectionSocket, localPlayerStartsMatch);
@@ -106,22 +105,14 @@ public class Player {
         }
     }
 
-    private static InetAddress discoverLocalPlayerAddress(String rmiRegistryHost, int rmiRegistryPort) throws IOException {
+    private static InetAddress readLocalPlayerAddress() throws IOException {
         String configuredLocalPlayerAddress = readEnvironmentVariable("PLAYER_IP", "");
 
         if (!configuredLocalPlayerAddress.isBlank()) {
             return InetAddress.getByName(configuredLocalPlayerAddress);
         }
 
-        try (Socket rmiRegistryDiscoverySocket = new Socket()) {
-            rmiRegistryDiscoverySocket.connect(new InetSocketAddress(rmiRegistryHost, rmiRegistryPort),
-                    CONNECTION_TIMEOUT_MILLIS);
-
-            return rmiRegistryDiscoverySocket.getLocalAddress();
-        } catch (IOException discoveryFailure) {
-            throw new IOException("Não foi possível descobrir o IP local pelo Registry em "
-                    + rmiRegistryHost + ":" + rmiRegistryPort + ": " + discoveryFailure.getMessage(), discoveryFailure);
-        }
+        return InetAddress.getLocalHost();
     }
 
     private static int readLocalPlayerRequestedPort() {
@@ -134,8 +125,9 @@ public class Player {
         return readPort("PLAYER_PORT", "0");
     }
 
-    private static Socket openConnectionWithOpponent(ServerSocket localPlayerListeningSocket, String opponentIpAddress,
-            int opponentListeningPort, boolean localPlayerStartsMatch) throws IOException {
+    private static Socket openConnectionWithOpponent(ServerSocket localPlayerListeningSocket,
+            InetAddress localPlayerAddress, String opponentIpAddress, int opponentListeningPort,
+            boolean localPlayerStartsMatch) throws IOException {
         if (!localPlayerStartsMatch) {
             System.out.println("Aguardando conexão TCP do adversário...");
             Socket acceptedOpponentSocket = localPlayerListeningSocket.accept();
@@ -151,6 +143,7 @@ public class Player {
         Socket outgoingOpponentSocket = new Socket();
 
         try {
+            outgoingOpponentSocket.bind(new InetSocketAddress(localPlayerAddress, 0));
             outgoingOpponentSocket.connect(new InetSocketAddress(opponentIpAddress, opponentListeningPort),
                     CONNECTION_TIMEOUT_MILLIS);
 

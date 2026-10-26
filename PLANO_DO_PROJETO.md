@@ -209,6 +209,8 @@ As escolhas TCP propostas foram aprovadas expressamente: iniciador conecta/X, ou
 
 ## 9. Última mudança registrada
 
+**26/10/2026 — identificação local simplificada:** substituído socket de descoberta por InetAddress.getLocalHost(), preservando PLAYER_IP opcional. Porta reservada com ServerSocket(porta), padrão0, preservando PLAYER_PORT opcional. Primeiro teste **falhou**: anúncio127.0.1.1, origem127.0.0.1, rejeição por IP divergente. Corrigido associando o socket de saída ao IP anunciado antes de connect com timeout. Repetição **passou**: IP127.0.1.1, portas46557/38065, entradasabc/9 rejeitadas, sequência0/3/1/4/2, vitória X e derrota O, ambos saída0. Compilação JDK17 em /tmp/tictactoe-simple-address **passou**, avisos unchecked esperados. Sem Display em execução; nenhum teste multicast novo. Timeout120s preservado no código, não reexecutado; VMs pendentes. Loopback não funciona entre máquinas. Documentação/guia e caso23 sincronizados.
+
 **26/10/2026 — nomes explícitos na comunicação do jogador:** Player distingue rmiRegistryHost/rmiRegistryPort, localPlayerAddress/localPlayerRequestedPort/localPlayerListeningSocket e opponentIpAddress/opponentListeningPort/opponentConnectionSocket. Métodos privados e parâmetros renomeados; TcpGameSession distingue entrada/saída do adversário e terminal/símbolo do jogador local. Guia de apresentação sincronizado. Somente nomes e quebras de linha alterados, sem mudança nos contratos JSON/RMI, variáveis de ambiente, descoberta automática ou timeouts. Compilação JDK17 em /tmp/tictactoe-explicit-names: **passou**, com avisos unchecked esperados. Partidas/VMs: **não reexecutadas** nesta refatoração. Próximo passo funcional permanece validação nas VMs.
 
 **26/10/2026 — espaçamento dos nove fontes Java solicitado pelo responsável:** acrescentadas linhas em branco entre grupos de imports, constantes/atributos, validações, laços e etapas lógicas dos métodos. Nenhuma instrução, string ou ordem de execução alterada. Comparação com cópia do estado imediatamente anterior ignorando somente linhas vazias: **passou nos nove arquivos**. Compilação JDK17 em /tmp/tictactoe-spacing: **passou**, avisos unchecked esperados. Partidas/VMs: **não reexecutadas**, por ser alteração exclusivamente de apresentação do código. Preferência registrada em AGENTS.md; JsonUtil próprio e alterações anteriores do MatchServer preservados.
@@ -297,6 +299,8 @@ O código importa filas TCP/UDP, espera com `wait`/`notifyAll`, FIFO, primeiro i
 3. Completar os cenários de robustez não executados. Após integração remota validada, preparar documentação Web e pitch previstos no PDF. Não iniciar jogadorUDP sem pedido específico.
 
 ## BLOCO DE RETOMADA (copiar para outro chat)
+
+> 26/10/2026: identificação do Player agora usa getLocalHost e ServerSocket(0), sem descoberta pelo Registry. Overrides preservados. Saída TCP vinculada ao IP anunciado para manter validação do adversário. Compilação e partida local com entradas inválidas passaram após corrigir divergência de IP. getLocalHost retornou127.0.1.1; VMs precisam anunciar IP alcançável. Novos testes remotos/timeout/multicast não executados.
 
 > 26/10/2026: Player e TcpGameSession receberam nomes explícitos para Registry, jogador local e adversário. Compilação passou; partidas não reexecutadas. Contratos, descoberta automática de IP/porta e timeouts preservados. Guia sincronizado; próxima validação funcional nas VMs permanece pendente.
 

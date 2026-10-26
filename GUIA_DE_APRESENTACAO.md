@@ -40,7 +40,7 @@ O servidor de match não recebe as jogadas nem escolhe o vencedor. Cada jogador 
 
 1. `MatchServer.main` exporta o serviço RMI e cria o Registry.
 2. `Player.main` lê as variáveis de ambiente.
-3. Sem `PLAYER_IP`, uma conexão TCP curta até o Registry permite obter o IP local usado nessa rota. Essa conexão é fechada após a descoberta.
+3. Sem `PLAYER_IP`, `InetAddress.getLocalHost()` obtém o IP associado ao nome local. Não abre conexão de descoberta ao Registry.
 4. Sem `PLAYER_PORT`, o jogador abre um `ServerSocket` na porta `0`. O sistema operacional reserva uma porta real, obtida por `getLocalPort()`.
 5. O jogador registra `ip`, `porta` e `protocolo` usando `MatchService.getOponent`.
 6. O primeiro pedido válido de um protocolo espera. Quando chega o segundo, ambos recebem o endereço do adversário. O primeiro recebe `inicia=true`; o segundo recebe `false`.
@@ -118,7 +118,7 @@ O `Player` coordena a entrada no sistema. A lógica detalhada dos turnos fica em
 | Método | Papel |
 | --- | --- |
 | `main` | Lê o endereço do Registry e apresenta erros de configuração/rede |
-| `discoverLocalPlayerAddress` | Usa `PLAYER_IP` quando fornecido; caso contrário, obtém o endereço local de uma conexão ao Registry |
+| `readLocalPlayerAddress` | Usa `PLAYER_IP` quando fornecido; caso contrário, chama `InetAddress.getLocalHost()` |
 | `readLocalPlayerRequestedPort` | Usa a porta configurada ou `0` para atribuição automática |
 | `findOpponentAndStartGame` | Reserva a escuta, cria o pedido JSON, procura o serviço, chama RMI e inicia a sessão |
 | `openConnectionWithOpponent` | Conecta se inicia; aceita se não inicia; verifica o IP do par aceito |
@@ -129,7 +129,7 @@ O `ServerSocket` recebe conexões. O `Socket` representa uma conexão estabeleci
 
 O `try` com recursos fecha os sockets ao sair do bloco, inclusive quando ocorre exceção. Conexão e aceite têm limite de 120 segundos.
 
-**Limite da descoberta:** o IP encontrado é o endereço local da rota até o Registry, não uma consulta de IP público. A descoberta não configura NAT/firewall nem comprova que o adversário alcance aquela porta. Os overrides permitem selecionar endereço e porta em redes que precisem disso.
+**Limite da identificação:** o IP vem da resolução do nome da máquina; pode ser loopback, como `127.0.1.1`, inadequado entre VMs. Conferir o IP anunciado e corrigir a resolução local ou usar `PLAYER_IP` se necessário. A descoberta não configura NAT/firewall nem comprova que o adversário alcance aquela porta. Os overrides permitem selecionar endereço e porta em redes que precisem disso.
 
 **Fala sugerida:** “O Player reserva o endereço antes de anunciá-lo, procura o adversário por RMI e passa a conexão TCP pronta para a classe que controla a partida.”
 
@@ -523,3 +523,5 @@ A tarefa ServerShutdown foi substituída por shutdownServer no próprio MatchSer
 Podem ser extraídas para arquivos próprios se desejado. Mover os campos do parser ou leitor para variáveis estáticas compartilhadas seria inadequado: chamadas simultâneas poderiam interferir umas nas outras.
 
 Atualização de configuração: removido o teste explícito de limite máximo de MATCH_TIMEOUT_SECONDS, mantendo valor positivo e representação como long. Se Duration.toNanos não conseguir representar a duração, a inicialização retorna erro de configuração contextual. Isso é uma limitação da representação numérica, não um novo teto configurado pelo projeto. Padrão continua300s.
+
+A escuta é criada com `new ServerSocket(localPlayerRequestedPort)`, padrão0. A conexão de saída usa bind no IP anunciado antes de connect, mantendo a verificação de identidade por IP mesmo quando o Linux resolve o hostname para127.0.1.1. Isso não autentica o jogador.
