@@ -4,7 +4,9 @@ import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
+
 import java.time.Duration;
+
 import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -12,15 +14,19 @@ import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-public class MatchServer implements MatchService {
+public class MatchServer implements MatchService, Runnable {
+
     private static final int DEFAULT_MATCH_TIMEOUT_SECONDS = 300;
     private static final int MIN_PORT_NUMBER = 1;
     private static final int MAX_PORT_NUMBER = 65535;
+
     private Object matchmakingMonitor = new Object();
     private Map requestsByProtocol = new HashMap();
     private long matchTimeoutNanoseconds;
+    private Registry matchRegistry;
 
     private static class PendingMatchRequest {
+
         JsonMessages.PlayerRegistration player;
         long expirationNanoseconds;
         String responseJson;
@@ -32,10 +38,16 @@ public class MatchServer implements MatchService {
     }
 
     public MatchServer(Duration matchTimeout) {
-        matchTimeoutNanoseconds = matchTimeout.toNanos();
+        try {
+            matchTimeoutNanoseconds = matchTimeout.toNanos();
+        } catch (ArithmeticException unsupportedDuration) {
+            throw new IllegalArgumentException("Timeout não pode ser representado em nanossegundos", unsupportedDuration);
+        }
+
         if (matchTimeoutNanoseconds <= 0) {
             throw new IllegalArgumentException("Timeout deve ser positivo");
         }
+
         requestsByProtocol.put("tcp", new ArrayDeque());
         requestsByProtocol.put("udp", new ArrayDeque());
     }
@@ -43,30 +55,39 @@ public class MatchServer implements MatchService {
     @Override
     public String getOponent(String requestJson) {
         JsonMessages.PlayerRegistration requestingPlayer;
+
         try {
             requestingPlayer = JsonMessages.readPlayerRequest(requestJson);
         } catch (IllegalArgumentException invalidRequest) {
             return JsonMessages.createErrorResponse(JsonMessages.ERROR_INVALID_REQUEST, invalidRequest.getMessage());
         }
+
         PendingMatchRequest currentRequest = new PendingMatchRequest(requestingPlayer, matchTimeoutNanoseconds);
         ArrayDeque protocolRequests = (ArrayDeque) requestsByProtocol.get(requestingPlayer.getProtocol());
+
         synchronized (matchmakingMonitor) {
             Iterator requestIterator = protocolRequests.iterator();
+
             while (requestIterator.hasNext()) {
                 PendingMatchRequest pendingRequest = (PendingMatchRequest) requestIterator.next();
+
                 if (System.nanoTime() - pendingRequest.expirationNanoseconds >= 0) {
                     pendingRequest.responseJson = createTimeoutResponse();
                     requestIterator.remove();
                     matchmakingMonitor.notifyAll();
                 }
             }
+
             for (Object queuedRequest : protocolRequests) {
                 PendingMatchRequest pendingRequest = (PendingMatchRequest) queuedRequest;
+
                 if (pendingRequest.player.hasSameEndpoint(requestingPlayer)) {
                     return JsonMessages.createErrorResponse(JsonMessages.ERROR_DUPLICATE, "Jogador já está aguardando um oponente");
                 }
             }
+
             PendingMatchRequest opponentRequest = (PendingMatchRequest) protocolRequests.pollFirst();
+
             if (opponentRequest == null) {
                 protocolRequests.addLast(currentRequest);
             } else {
@@ -74,13 +95,16 @@ public class MatchServer implements MatchService {
                 currentRequest.responseJson = JsonMessages.createOpponentResponse(opponentRequest.player, false);
                 matchmakingMonitor.notifyAll();
             }
+
             while (currentRequest.responseJson == null) {
                 long remainingNanoseconds = currentRequest.expirationNanoseconds - System.nanoTime();
+
                 if (remainingNanoseconds <= 0) {
                     protocolRequests.remove(currentRequest);
                     currentRequest.responseJson = createTimeoutResponse();
                     break;
                 }
+
                 try {
                     TimeUnit.NANOSECONDS.timedWait(matchmakingMonitor, remainingNanoseconds);
                 } catch (InterruptedException interruptedWait) {
@@ -88,10 +112,12 @@ public class MatchServer implements MatchService {
                         protocolRequests.remove(currentRequest);
                         currentRequest.responseJson = JsonMessages.createErrorResponse(JsonMessages.ERROR_INTERRUPTED, "Espera interrompida");
                     }
+
                     Thread.currentThread().interrupt();
                     break;
                 }
             }
+
             return currentRequest.responseJson;
         }
     }
@@ -124,7 +150,9 @@ public class MatchServer implements MatchService {
             throws RemoteException, InterruptedException {
         int remoteObjectPort = readPort("RMI_OBJECT_PORT", null);
         long matchTimeoutSeconds = readMatchTimeoutSeconds();
+
         System.setProperty("java.rmi.server.hostname", serverHost);
+
         MatchServer matchServer = new MatchServer(Duration.ofSeconds(matchTimeoutSeconds));
         MatchService remoteService = (MatchService) UnicastRemoteObject.exportObject(matchServer, remoteObjectPort);
         Registry matchRegistry;
@@ -135,6 +163,7 @@ public class MatchServer implements MatchService {
             closeRemoteObject(matchServer, "servidor de match");
             throw registryFailure;
         }
+
         try {
             matchRegistry.rebind(serviceName, remoteService);
         } catch (RemoteException registrationFailure) {
@@ -143,26 +172,24 @@ public class MatchServer implements MatchService {
             throw registrationFailure;
         }
 
-        Runtime.getRuntime().addShutdownHook(new Thread(new ServerShutdown(matchRegistry, matchServer)));
+        matchServer.matchRegistry = matchRegistry;
+
+        Runtime.getRuntime().addShutdownHook(new Thread(matchServer, "encerramento-rmi"));
+
         System.out.printf("Registry %s:%d, serviço %s, objeto remoto na porta %d%n",
                 serverHost, registryPort, serviceName, remoteObjectPort);
+
         new CountDownLatch(1).await();
     }
 
-    private static class ServerShutdown implements Runnable {
-        private Registry matchRegistry;
-        private MatchServer matchServer;
+    @Override
+    public void run() {
+        shutdownServer();
+    }
 
-        ServerShutdown(Registry matchRegistry, MatchServer matchServer) {
-            this.matchRegistry = matchRegistry;
-            this.matchServer = matchServer;
-        }
-
-        @Override
-        public void run() {
-            closeRemoteObject(matchRegistry, "Registry");
-            closeRemoteObject(matchServer, "servidor de match");
-        }
+    private void shutdownServer() {
+        closeRemoteObject(matchRegistry, "Registry");
+        closeRemoteObject(this, "servidor de match");
     }
 
     private static void closeRemoteObject(Remote remoteObject, String resourceName) {
@@ -175,26 +202,32 @@ public class MatchServer implements MatchService {
 
     private static String readEnvironmentVariable(String variableName, String defaultValue) {
         String configuredValue = System.getenv(variableName);
+
         if (configuredValue != null && !configuredValue.isBlank()) {
             return configuredValue;
         }
+
         if (defaultValue == null) {
             throw new IllegalArgumentException("Defina a variável " + variableName);
         }
+
         return defaultValue;
     }
 
     private static int readPort(String variableName, String defaultValue) {
         String configuredPort = readEnvironmentVariable(variableName, defaultValue);
         int portNumber;
+
         try {
             portNumber = Integer.parseInt(configuredPort);
         } catch (NumberFormatException invalidPort) {
             throw new IllegalArgumentException(variableName + " deve conter uma porta inteira", invalidPort);
         }
+
         if (portNumber < MIN_PORT_NUMBER || portNumber > MAX_PORT_NUMBER) {
             throw new IllegalArgumentException(variableName + " deve estar entre 1 e 65535");
         }
+
         return portNumber;
     }
 
@@ -202,14 +235,17 @@ public class MatchServer implements MatchService {
         String configuredTimeout = readEnvironmentVariable("MATCH_TIMEOUT_SECONDS",
                 Integer.toString(DEFAULT_MATCH_TIMEOUT_SECONDS));
         long timeoutSeconds;
+
         try {
             timeoutSeconds = Long.parseLong(configuredTimeout);
         } catch (NumberFormatException invalidTimeout) {
             throw new IllegalArgumentException("MATCH_TIMEOUT_SECONDS deve conter um inteiro positivo", invalidTimeout);
         }
-        if (timeoutSeconds <= 0 || timeoutSeconds > Long.MAX_VALUE / 1000000000L) {
-            throw new IllegalArgumentException("MATCH_TIMEOUT_SECONDS fora do intervalo permitido");
+
+        if (timeoutSeconds <= 0) {
+            throw new IllegalArgumentException("MATCH_TIMEOUT_SECONDS deve ser positivo");
         }
+
         return timeoutSeconds;
     }
 }

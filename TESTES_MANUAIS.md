@@ -673,3 +673,38 @@ Esperado: portas atribuídas automaticamente, mesmo ID nos dois jogadores; termi
 6. Para provocar incompatibilidade de formato, executar um publicador compilado da versão anterior (sem envelope) contra o Display novo, em ambiente local separado: esperado aviso de datagrama descartado, sem encerrar receptor. Não misturar versões nas VMs. Este cenário e envelopes com tipos inválidos não foram executados nesta alteração.
 
 Resultado real: compilação e passos2–4 passaram em localhost, cinco snapshots com o mesmo UUID e vitóriaX. Todos os processos encerrados. VMs e passos5–6 não executados.
+
+## Caso 22 — encerramento em método e configuração do timeout
+
+Objetivo: conferir inicialização/encerramento após remover ServerShutdown e os erros de configuração do timeout. Pré-requisitos: JDK17 no PATH, fontes atuais e portas1199/5121 livres.
+
+1. Compilar:
+
+```bash
+mkdir -p /tmp/tictactoe-shutdown-method
+javac -encoding UTF-8 -d /tmp/tictactoe-shutdown-method code/*.java
+```
+
+2. Iniciar:
+
+```bash
+RMI_HOST=127.0.0.1 RMI_REGISTRY_PORT=1199 RMI_OBJECT_PORT=5121 RMI_SERVICE_NAME=MatchShutdown java -cp /tmp/tictactoe-shutdown-method MatchServer
+```
+
+Esperado: Registry/serviço iniciados. Pressionar Ctrl+C, repetir o mesmo comando e pressionar Ctrl+C novamente. Sinais de falha: exceção de encerramento, Registry não iniciado ou erro de porta ocupada. Executado e passou antes da alteração de validação do timeout; o reinício verifica o ciclo do processo, não comprova isoladamente a liberação antes da saída da JVM.
+
+3. Provocar valor não positivo:
+
+```bash
+MATCH_TIMEOUT_SECONDS=0 RMI_OBJECT_PORT=5121 java -cp /tmp/tictactoe-shutdown-method MatchServer
+```
+
+Esperado: configuração inválida, timeout deve ser positivo e saída1. Executado e passou na compilação final.
+
+4. Provocar overflow de representação:
+
+```bash
+MATCH_TIMEOUT_SECONDS=9223372036854775807 RMI_OBJECT_PORT=5121 java -cp /tmp/tictactoe-shutdown-method MatchServer
+```
+
+Esperado: erro contextual de representação em nanossegundos e saída1, sem stack trace não tratado. Não existe mais comparação explícita com limite máximo na leitura. Executado e passou. Não esperar um prazo dessa duração real. Timeout padrão permanece300s; partida completa, espera real e VMs não reexecutadas nesta alteração.

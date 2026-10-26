@@ -182,6 +182,7 @@ Ao explicar código, partir desses fundamentos. Explicar recursos de rede, sincr
 - Para entrada textual no terminal, preferir o padrão familiar `BufferedReader` com `InputStreamReader` quando houver necessidade de leitura interativa. Não adicionar menus ou interação a módulos que não precisem disso.
 - Por pedido posterior do responsável, manter os fontes Java sem comentários, incluindo Javadoc. Explicações ficam na documentação e na conversa. Manter mensagens de terminal em português; não impor renomeação em massa dos identificadores existentes, que já misturam idiomas.
 - Preservar nomes compreensíveis e organização consistente; o recuo irregular do exemplo não é um padrão a reproduzir. Usar o recuo já consistente no projeto.
+- Por pedido de26/10/2026, separar visualmente com uma linha em branco grupos de imports, constantes/atributos, validações e etapas lógicas dos métodos. Manter juntas operações relacionadas; preservar a ordem de execução e evitar código excessivamente compacto. Não inserir linhas em branco entre cada instrução indiscriminadamente.
 - **Permitir `final` somente para constantes nomeadas**, com nomes em MAIUSCULAS_COM_SUBLINHADOS; por exemplo, `final int SAIR = 0;`. Não usar `final` em classes, métodos, parâmetros ou variáveis comuns. Esta exceção substitui a proibição total anterior; ela não exige adicionar constantes a toda operação.
 
 ### 9.3. Correções aprovadas para o código gerado
@@ -208,3 +209,11 @@ O responsável pediu dispensar a configuração manual de IP/porta do jogador. P
 O responsável pediu mostrar o ID antes de cada tabuleiro. O multicast agora usa `{"partidaId":"UUID","jogada":{"Numero":0,"Jogada":0,"Tabuleiro":[1,0,0,0,0,0,0,0,0],"Resultado":"jog"}}`. TcpGameSession passa o UUID já compartilhado por TCP para Display.publishMove; Display serializa o envelope sem alterar o mapa da jogada. O receptor exige partidaId textual não vazio e jogada como objeto, valida o snapshot e imprime ID, jogada e tabuleiro. JSON RMI e mensagens TCP preservados. Não há menu, lista persistente ou filtro; snapshots de várias partidas continuam sequenciais no terminal, cada um com ID. Não garante entrega/ordem multicast.
 
 Atualizar Display.java e TcpGameSession.java nas duas VMs jogadoras e recompilar todos os fontes; atualizar e reiniciar também qualquer Display isolado. Formato anterior sem envelope será descartado por receptores novos; receptores antigos não interpretam o envelope novo. Não misturar versões. Compilação e uma partida local com ID no Display passaram; partidas simultâneas e VMs não executadas. Roteiro21 em TESTES_MANUAIS.md. Essa extensão é decisão do projeto, não requisito explícito do professor.
+
+## Encerramento por método aprovado posteriormente
+
+Em26/10/2026, o responsável pediu substituir a classe interna de encerramento do servidor por método e analisar ocorrências semelhantes. ServerShutdown removida; MatchServer implementa Runnable, run delega a shutdownServer e a thread do hook usa a própria instância. Não introduzir lambda nem classe anônima para contornar a preferência. PendingMatchRequest, PlayerRegistration, TerminalLineReader e JsonParser foram identificadas e explicadas; sua remoção não foi implementada nesta etapa, pois guardam estado próprio.
+
+## Timeout sem teto explícito
+
+Pedido posterior26/10/2026: remover comparação com limite máximo em readMatchTimeoutSeconds. Preservar positividade, padrão300s e mensagens de configuração. Duration.toNanos pode falhar por limite de representação; tratar essa conversão como erro de configuração, sem inventar teto de negócio.

@@ -4,54 +4,72 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
+
 import java.net.Socket;
 import java.net.SocketTimeoutException;
+
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
+
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 class TcpGameSession {
+
     private static final int RESPONSE_TIMEOUT_SECONDS = 120;
     private static final int MAX_MESSAGE_CHARACTERS = 16384;
-    private Socket opponentSocket;
-    private BufferedReader networkReader;
-    private BufferedWriter networkWriter;
-    private BufferedReader terminalReader;
+
+    private Socket opponentConnectionSocket;
+    private BufferedReader opponentMessageReader;
+    private BufferedWriter opponentMessageWriter;
+
+    private BufferedReader localPlayerTerminalReader;
+
     private String sessionIdentifier;
-    private int localSymbol;
-    private int opponentSymbol;
+    private int localPlayerSymbol;
+    private int opponentPlayerSymbol;
+
     private TicTacToeRules gameRules = new TicTacToeRules();
     private Display displayPublisher;
 
-    TcpGameSession(Socket opponentSocket, boolean startsMatch) throws IOException {
-        this.opponentSocket = opponentSocket;
-        networkReader = new BufferedReader(new InputStreamReader(opponentSocket.getInputStream(),
+    TcpGameSession(Socket opponentConnectionSocket, boolean localPlayerStartsMatch) throws IOException {
+        this.opponentConnectionSocket = opponentConnectionSocket;
+
+        opponentMessageReader = new BufferedReader(new InputStreamReader(opponentConnectionSocket.getInputStream(),
                 StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
                         .onUnmappableCharacter(CodingErrorAction.REPORT)));
-        networkWriter = new BufferedWriter(new OutputStreamWriter(opponentSocket.getOutputStream(), StandardCharsets.UTF_8));
-        terminalReader = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
-        localSymbol = TicTacToeRules.O_SYMBOL;
-        opponentSymbol = TicTacToeRules.X_SYMBOL;
-        if (startsMatch) {
-            localSymbol = TicTacToeRules.X_SYMBOL;
-            opponentSymbol = TicTacToeRules.O_SYMBOL;
+        opponentMessageWriter = new BufferedWriter(new OutputStreamWriter(opponentConnectionSocket.getOutputStream(), StandardCharsets.UTF_8));
+
+        localPlayerTerminalReader = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
+
+        localPlayerSymbol = TicTacToeRules.O_SYMBOL;
+        opponentPlayerSymbol = TicTacToeRules.X_SYMBOL;
+
+        if (localPlayerStartsMatch) {
+            localPlayerSymbol = TicTacToeRules.X_SYMBOL;
+            opponentPlayerSymbol = TicTacToeRules.O_SYMBOL;
         }
     }
 
-    void play(boolean startsMatch) throws IOException {
+    void play(boolean localPlayerStartsMatch) throws IOException {
         displayPublisher = Display.openPublisher();
+
         try {
-            exchangeSessionIdentifier(startsMatch);
-            System.out.println("Conexão TCP estabelecida. Você joga com " + symbolName(localSymbol) + ".");
+            exchangeSessionIdentifier(localPlayerStartsMatch);
+
+            System.out.println("Conexão TCP estabelecida. Você joga com " + symbolName(localPlayerSymbol) + ".");
+
             showBoard();
-            if (!startsMatch) {
+
+            if (!localPlayerStartsMatch) {
                 receiveOpponentTurn();
             }
+
             while (!gameRules.isGameOver()) {
                 playLocalTurn();
             }
+
             showResult();
         } catch (SocketTimeoutException inactivity) {
             sendFailureWhenPossible("inatividade", "Prazo de 120 segundos esgotado");
@@ -69,9 +87,10 @@ class TcpGameSession {
         }
     }
 
-    private void exchangeSessionIdentifier(boolean startsMatch) throws IOException {
+    private void exchangeSessionIdentifier(boolean localPlayerStartsMatch) throws IOException {
         long deadline = newResponseDeadline();
-        if (startsMatch) {
+
+        if (localPlayerStartsMatch) {
             sessionIdentifier = UUID.randomUUID().toString();
             sendMessage(GameMessages.createControl(sessionIdentifier, "inicio"));
         } else {
@@ -80,45 +99,61 @@ class TcpGameSession {
             UUID.fromString(sessionIdentifier);
             GameMessages.validateControl(initialMessage, sessionIdentifier, "inicio");
         }
+
         System.out.println("Partida: " + sessionIdentifier);
     }
 
     private void playLocalTurn() throws IOException {
         TicTacToeRules previousRules = gameRules;
         long responseDeadline = 0;
+
         while (true) {
             gameRules = previousRules;
+
             int cellPosition = readLocalMove(responseDeadline);
+
             TicTacToeRules candidateRules = new TicTacToeRules(previousRules);
-            candidateRules.placeMove(cellPosition, localSymbol);
+            candidateRules.placeMove(cellPosition, localPlayerSymbol);
+
             if (responseDeadline == 0) {
                 responseDeadline = newResponseDeadline();
             }
+
             ensureTimeRemaining(responseDeadline);
             sendMessage(GameMessages.createMove(candidateRules, cellPosition));
+
             gameRules = candidateRules;
+
             showBoard();
+
             Map response = readMessage(responseDeadline);
+
             if (response.containsKey("evento")) {
                 String eventName = GameMessages.readText(response, "evento");
+
                 if (eventName.equals("rejeicao")) {
                     GameMessages.validateControl(response, sessionIdentifier, "rejeicao");
+
                     if (!Boolean.TRUE.equals(response.get("refazer"))) {
                         throw new IOException("Rejeição sem pedido de correção");
                     }
+
                     System.out.println("Jogada rejeitada: " + GameMessages.readText(response, "motivo"));
                     gameRules = previousRules;
                     showBoard();
                     continue;
                 }
+
                 processRemoteFailure(response);
                 GameMessages.validateFinish(response, sessionIdentifier, gameRules);
                 sendMessage(GameMessages.createControl(sessionIdentifier, "confirmacao_fim"));
                 return;
             }
+
             if (gameRules.isGameOver()) {
                 throw new IOException("Esperado controle fim após a jogada conclusiva");
             }
+
             acceptOpponentMove(response, responseDeadline);
             return;
         }
@@ -137,9 +172,11 @@ class TcpGameSession {
                 processRemoteFailure(message);
                 throw new IOException("Controle inesperado enquanto aguardava jogada");
             }
+
             TicTacToeRules candidateRules;
+
             try {
-                candidateRules = GameMessages.validateMove(message, gameRules, opponentSymbol);
+                candidateRules = GameMessages.validateMove(message, gameRules, opponentPlayerSymbol);
             } catch (IllegalArgumentException invalidMove) {
                 Map rejection = GameMessages.createControl(sessionIdentifier, "rejeicao");
                 rejection.put("motivo", invalidMove.getMessage());
@@ -149,21 +186,28 @@ class TcpGameSession {
                 message = readMessage(deadline);
                 continue;
             }
+
             gameRules = candidateRules;
+
             if (displayPublisher != null) {
                 displayPublisher.publishMove(sessionIdentifier, message);
             }
+
             showBoard();
+
             if (gameRules.isGameOver()) {
                 String status = "vitoria";
+
                 if (gameRules.isDraw()) {
                     status = "empate";
                 }
+
                 sendMessage(GameMessages.createFinish(sessionIdentifier, gameRules, status));
                 Map confirmation = readMessage(newResponseDeadline());
                 processRemoteFailure(confirmation);
                 GameMessages.validateControl(confirmation, sessionIdentifier, "confirmacao_fim");
             }
+
             return;
         }
     }
@@ -173,38 +217,50 @@ class TcpGameSession {
             if (correctionDeadline != 0) {
                 ensureTimeRemaining(correctionDeadline);
             }
+
             System.out.print("Escolha uma casa de 0 a 8: ");
             System.out.flush();
-            TerminalLineReader inputTask = new TerminalLineReader(terminalReader);
+
+            TerminalLineReader inputTask = new TerminalLineReader(localPlayerTerminalReader);
             Thread inputThread = new Thread(inputTask, "entrada-da-jogada");
             inputThread.setDaemon(true);
             inputThread.start();
+
             while (!inputTask.isCompleted()) {
                 if (correctionDeadline != 0) {
                     ensureTimeRemaining(correctionDeadline);
                 }
-                opponentSocket.setSoTimeout(100);
+
+                opponentConnectionSocket.setSoTimeout(100);
+
                 int firstCharacter;
+
                 try {
-                    firstCharacter = networkReader.read();
+                    firstCharacter = opponentMessageReader.read();
                 } catch (SocketTimeoutException noRemoteMessage) {
                     continue;
                 }
+
                 if (firstCharacter == -1) {
                     throw new EOFException("O adversário encerrou a conexão");
                 }
+
                 Map unexpectedMessage = readMessage(newResponseDeadline(), firstCharacter);
                 processRemoteFailure(unexpectedMessage);
                 throw new IOException("Mensagem recebida fora do turno do adversário");
             }
+
             String inputText = inputTask.getInputText();
+
             if (inputText == null) {
                 throw new EOFException("Entrada do terminal encerrada");
             }
+
             try {
                 int cellPosition = Integer.parseInt(inputText.trim());
                 TicTacToeRules candidateRules = new TicTacToeRules(gameRules);
-                candidateRules.placeMove(cellPosition, localSymbol);
+                candidateRules.placeMove(cellPosition, localPlayerSymbol);
+
                 return cellPosition;
             } catch (NumberFormatException invalidNumber) {
                 System.out.println("Digite um número inteiro de 0 a 8.");
@@ -221,15 +277,19 @@ class TcpGameSession {
     private Map readMessage(long deadline, int firstCharacter) throws IOException {
         StringBuilder messageText = new StringBuilder();
         int nextCharacter = firstCharacter;
+
         while (true) {
             int remainingMillis = ensureTimeRemaining(deadline);
-            opponentSocket.setSoTimeout(remainingMillis);
+            opponentConnectionSocket.setSoTimeout(remainingMillis);
+
             if (nextCharacter == -2) {
-                nextCharacter = networkReader.read();
+                nextCharacter = opponentMessageReader.read();
             }
+
             if (nextCharacter == -1) {
                 throw new EOFException("O adversário encerrou a conexão");
             }
+
             if (nextCharacter == '\n') {
                 try {
                     return GameMessages.readObject(messageText.toString());
@@ -237,26 +297,31 @@ class TcpGameSession {
                     throw new IOException("JSON inválido: " + invalidJson.getMessage(), invalidJson);
                 }
             }
+
             if (messageText.length() >= MAX_MESSAGE_CHARACTERS) {
                 throw new IOException("Mensagem TCP maior que 16384 caracteres");
             }
+
             messageText.append((char) nextCharacter);
             nextCharacter = -2;
         }
     }
 
     private void sendMessage(Map message) throws IOException {
-        networkWriter.write(JsonUtil.toJson(message));
-        networkWriter.write('\n');
-        networkWriter.flush();
+        opponentMessageWriter.write(JsonUtil.toJson(message));
+        opponentMessageWriter.write('\n');
+        opponentMessageWriter.flush();
     }
 
     private void processRemoteFailure(Map message) throws IOException {
         if (!"fim".equals(message.get("evento"))) {
             return;
         }
+
         GameMessages.validateControl(message, sessionIdentifier, "fim");
+
         String status = GameMessages.readText(message, "status");
+
         if (status.equals("erro") || status.equals("inatividade")) {
             throw new IOException("Adversário encerrou por " + status);
         }
@@ -264,9 +329,11 @@ class TcpGameSession {
 
     private void sendFailureWhenPossible(String status, String reason) {
         System.err.println("Partida encerrada por " + status + ": " + reason);
+
         if (sessionIdentifier == null) {
             return;
         }
+
         try {
             Map failure = GameMessages.createFinish(sessionIdentifier, gameRules, status);
             failure.put("motivo", reason);
@@ -282,45 +349,54 @@ class TcpGameSession {
 
     private int ensureTimeRemaining(long deadline) throws SocketTimeoutException {
         long remainingNanos = deadline - System.nanoTime();
+
         if (remainingNanos <= 0) {
             throw new SocketTimeoutException("O adversário não respondeu dentro do prazo");
         }
+
         return (int) Math.max(1, TimeUnit.NANOSECONDS.toMillis(remainingNanos));
     }
 
     private void showBoard() {
         System.out.println();
         int[] board = gameRules.getBoardCopy();
+
         for (int row = 0; row < 3; row++) {
             String line = "";
+
             for (int column = 0; column < 3; column++) {
                 int position = row * 3 + column;
                 String cell = Integer.toString(position);
+
                 if (board[position] != TicTacToeRules.EMPTY_CELL) {
                     cell = symbolName(board[position]);
                 }
+
                 if (column > 0) {
                     line += " | ";
                 }
+
                 line += cell;
             }
+
             System.out.println(line);
         }
     }
 
     private static class TerminalLineReader implements Runnable {
-        private BufferedReader terminalReader;
+
+        private BufferedReader localPlayerTerminalReader;
         private String inputText;
         private IOException inputFailure;
         private volatile boolean completed;
 
-        TerminalLineReader(BufferedReader terminalReader) {
-            this.terminalReader = terminalReader;
+        TerminalLineReader(BufferedReader localPlayerTerminalReader) {
+            this.localPlayerTerminalReader = localPlayerTerminalReader;
         }
 
         public void run() {
             try {
-                inputText = terminalReader.readLine();
+                inputText = localPlayerTerminalReader.readLine();
             } catch (IOException readFailure) {
                 inputFailure = readFailure;
             } finally {
@@ -336,6 +412,7 @@ class TcpGameSession {
             if (inputFailure != null) {
                 throw inputFailure;
             }
+
             return inputText;
         }
     }
@@ -344,13 +421,14 @@ class TcpGameSession {
         if (symbol == TicTacToeRules.X_SYMBOL) {
             return "X";
         }
+
         return "O";
     }
 
     private void showResult() {
         if (gameRules.isDraw()) {
             System.out.println("Partida encerrada: empate.");
-        } else if (gameRules.getWinner() == localSymbol) {
+        } else if (gameRules.getWinner() == localPlayerSymbol) {
             System.out.println("Partida encerrada: você venceu.");
         } else {
             System.out.println("Partida encerrada: você perdeu.");

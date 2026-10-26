@@ -254,3 +254,11 @@ Teste manual e falhas: caso 20 de TESTES_MANUAIS.md. Compilação e uma partida 
 O responsável pediu mostrar o ID antes de cada tabuleiro. O multicast agora usa `{"partidaId":"UUID","jogada":{"Numero":0,"Jogada":0,"Tabuleiro":[1,0,0,0,0,0,0,0,0],"Resultado":"jog"}}`. TcpGameSession passa o UUID já compartilhado por TCP para Display.publishMove; Display serializa o envelope sem alterar o mapa da jogada. O receptor exige partidaId textual não vazio e jogada como objeto, valida o snapshot e imprime ID, jogada e tabuleiro. JSON RMI e mensagens TCP preservados. Não há menu, lista persistente ou filtro; snapshots de várias partidas continuam sequenciais no terminal, cada um com ID. Não garante entrega/ordem multicast.
 
 Atualizar Display.java e TcpGameSession.java nas duas VMs jogadoras e recompilar todos os fontes; atualizar e reiniciar também qualquer Display isolado. Formato anterior sem envelope será descartado por receptores novos; receptores antigos não interpretam o envelope novo. Não misturar versões. Compilação e uma partida local com ID no Display passaram; partidas simultâneas e VMs não executadas. Roteiro21 em TESTES_MANUAIS.md. Essa extensão é decisão do projeto, não requisito explícito do professor.
+
+## Guia para estudo e vídeo
+
+[GUIA_DE_APRESENTACAO.md](GUIA_DE_APRESENTACAO.md) explica os nove fontes Java, os fluxos RMI/TCP/multicast, métodos principais, mensagens e limites da implementação. Inclui roteiro de10 minutos e demonstração manual. Preparado em26/10/2026; não representa nova execução dos testes, gravação ou publicação Web.
+
+## Encerramento RMI sem classe interna de tarefa
+
+Por pedido do responsável, ServerShutdown foi removida. MatchServer implementa Runnable e registra new Thread(matchServer) como shutdown hook; run delega ao método shutdownServer, que libera Registry e objeto remoto. Sem lambda nem classe anônima. PendingMatchRequest permanece como registro de estado. Revisão das outras classes internas e justificativas no guia de apresentação.
