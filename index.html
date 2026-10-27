@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jogo da Velha Distribuído</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #ffffff;
+    --text: #1d232b;
+    --muted: #5b6673;
+    --line: #dde2e8;
+    --code-bg: #f3f5f7;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 860px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 32px; margin: 0 0 4px; }
+  h2 { font-size: 22px; margin: 48px 0 12px; padding-top: 16px; border-top: 1px solid var(--line); }
+  h3 { font-size: 17px; margin: 24px 0 8px; }
+  p, li { max-width: 70ch; }
+  .sub { color: var(--muted); margin: 0 0 16px; }
+  nav { display: flex; flex-wrap: wrap; gap: 6px; margin: 16px 0 0; }
+  nav a {
+    color: var(--text); text-decoration: none; font-size: 13px; font-weight: 600;
+    padding: 2px 10px; border: 1px solid var(--line); border-radius: 999px;
+    background: var(--code-bg);
+  }
+  nav a:hover { border-color: var(--text); }
+  .video {
+    display: block; margin: 16px 0; padding: 16px 20px;
+    border: 2px solid var(--text); border-radius: 10px;
+    color: var(--text); text-decoration: none;
+  }
+  .video strong { display: block; font-size: 18px; }
+  .video span { color: var(--muted); font-size: 15px; }
+  .video:hover { background: var(--code-bg); }
+  code, pre { font: 14px/1.5 ui-monospace, "JetBrains Mono", Consolas, monospace; }
+  code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+  pre { background: var(--code-bg); padding: 12px 14px; border-radius: 8px; overflow-x: auto; margin: 8px 0 16px; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; font-size: 15px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  .tag { font-weight: 700; }
+  .note { border-left: 3px solid var(--line); padding: 4px 12px; color: var(--muted); margin: 12px 0; }
+  .scroll { overflow-x: auto; }
+  @media (max-width: 600px) {
+    h1 { font-size: 26px; }
+  }
+</style>
+</head>
+<body>
+<main>
+
+<h1>Jogo da Velha Distribuído</h1>
+<a class="video" href="#" id="video-link">
+  <strong>▶ Vídeo de apresentação (YouTube)</strong>
+  <span>Link a ser publicado em breve</span>
+</a>
+<p>
+  Dois jogadores se encontram por um <strong>servidor de match (RMI)</strong>, jogam direto entre si por
+  <strong>socket TCP</strong> e cada jogada aceita é divulgada por <strong>multicast UDP</strong>
+  para quantos <strong>displays</strong> estiverem escutando.
+</p>
+<nav>
+  <a href="#visao">Visão geral</a>
+  <a href="#fluxo">Fluxo das requisições</a>
+  <a href="#arquivos">Arquivos</a>
+  <a href="#executar">Como executar</a>
+  <a href="#mensagens">Mensagens</a>
+  <a href="#regras">Regras</a>
+  <a href="#falhas">Resposta a falhas</a>
+</nav>
+
+<h2 id="visao">Visão geral</h2>
+<table>
+  <tr><th>Programa</th><th>O que faz</th><th>Fala com</th></tr>
+  <tr><td><strong>MatchServer</strong></td><td>Recebe pedidos de partida, pareia dois jogadores com o mesmo protocolo e responde aos dois.</td><td>RMI</td></tr>
+  <tr><td><strong>Player</strong></td><td>Pede um adversário, joga uma partida pelo terminal e publica cada jogada aceita.</td><td><span>RMI</span> · <span>TCP</span> · <span>multicast</span></td></tr>
+  <tr><td><strong>Display</strong></td><td>Escuta o grupo multicast e mostra o tabuleiro. Pode haver vários; a partida não depende deles.</td><td>multicast</td></tr>
+</table>
+
+<table>
+  <tr><th>Parâmetro</th><th>Valor</th></tr>
+  <tr><td>Servidor de match (VM)</td><td><code>152.92.236.14</code></td></tr>
+  <tr><td>Jogadores (VMs)</td><td><code>152.92.236.16</code> e <code>152.92.236.17</code></td></tr>
+  <tr><td>Porta do RMIRegistry</td><td><code>9821</code></td></tr>
+  <tr><td>Nome do serviço RMI</td><td><code>MatchService21</code></td></tr>
+  <tr><td>Grupo multicast</td><td><code>225.1.1.21</code>, porta <code>8821</code></td></tr>
+</table>
+
+<h2 id="fluxo">Fluxo das requisições</h2>
+
+<h3>1 · Pareamento (RMI)</h3>
+<ol>
+  <li>Cada jogador reserva uma porta TCP livre e chama <code>getOponent</code> no servidor, enviando seu <code>ip</code>, <code>porta</code> e <code>protocolo</code>.</li>
+  <li>O servidor guarda o pedido numa fila (uma por protocolo) e a chamada fica pendente.</li>
+  <li>Quando chega o segundo pedido, o servidor responde aos <strong>dois</strong>: o primeiro recebe <code>inicia=true</code>, o segundo <code>inicia=false</code>.</li>
+  <li>Sem par em <strong>300 s</strong>, o pedido sai da fila e o jogador recebe <code>TIMEOUT</code>.</li>
+</ol>
+
+<h3>2 · Partida (TCP)</h3>
+<ol>
+  <li>Quem recebeu <code>inicia=true</code> conecta ao adversário e joga com <strong>X</strong>; o outro aceita a conexão e joga com <strong>O</strong>.</li>
+  <li>O iniciador gera um <code>partidaId</code> (UUID) e envia o evento <code>inicio</code>.</li>
+  <li>Cada jogada vai como uma linha JSON. Quem recebe valida: se estiver correta, aplica e joga a sua; se não, responde <code>rejeicao</code> e o autor refaz.</li>
+  <li>Na jogada final (vitória ou empate), quem recebe envia <code>fim</code> e o autor responde <code>confirmacao_fim</code>.</li>
+</ol>
+
+<h3>3 · Divulgação (multicast)</h3>
+<ol>
+  <li>Depois de validar a jogada recebida por TCP, o jogador envia <strong>um</strong> datagrama ao grupo <code>225.1.1.21:8821</code>.</li>
+  <li>Cada datagrama traz o tabuleiro inteiro, então um Display que entra no meio da partida já mostra o estado correto.</li>
+  <li>Jogadas rejeitadas nunca são publicadas. Não há confirmação de recebimento.</li>
+</ol>
+
+<h2 id="arquivos">O que cada arquivo faz</h2>
+<p>Todos ficam em <code>code/</code>. São nove fontes, somente JDK, sem bibliotecas externas.</p>
+<table>
+  <tr><th>Arquivo</th><th>Responsabilidade</th></tr>
+  <tr><td><code>MatchServer.java</code></td><td>Programa do servidor: registra o serviço RMI, mantém a fila, pareia, aplica o timeout de 300 s.</td></tr>
+  <tr><td><code>MatchService.java</code></td><td>Interface remota com <code>String getOponent(String json)</code>.</td></tr>
+  <tr><td><code>Player.java</code></td><td>Programa do jogador: lê configuração, reserva a porta, chama o RMI e inicia a sessão TCP.</td></tr>
+  <tr><td><code>TcpGameSession.java</code></td><td>A partida: troca de mensagens TCP, terminal, prazos de 120 s, rejeição, fim e publicação multicast.</td></tr>
+  <tr><td><code>TicTacToeRules.java</code></td><td>Regras do jogo: aplica jogada, alternância, vitória, empate. Sem rede e sem JSON.</td></tr>
+  <tr><td><code>GameMessages.java</code></td><td>Cria e valida as mensagens da partida (jogada, controles, snapshot do display).</td></tr>
+  <tr><td><code>Display.java</code></td><td>Sockets multicast: publica (usado pelo Player) e, executado sozinho, recebe e mostra o tabuleiro.</td></tr>
+  <tr><td><code>JsonMessages.java</code></td><td>Cria e valida o JSON do match (pedido, sucesso, erro).</td></tr>
+  <tr><td><code>JsonUtil.java</code></td><td>Leitor e gerador de JSON próprio, no lugar de uma biblioteca.</td></tr>
+</table>
+
+<h2 id="executar">Como executar</h2>
+<p>Em cada máquina, entre no repositório <code>tictactoe</code> (as variáveis de ambiente já estão configuradas lá), compile todos os arquivos e execute o programa correspondente:</p>
+<pre><code>javac *.java
+java -cp . MatchServer</code></pre>
+<p>Troque <code>MatchServer</code> por <code>Player</code> ou <code>Display</code>, conforme a máquina:</p>
+<table>
+  <tr><th>Máquina</th><th>Comando</th></tr>
+  <tr><td><strong>.14</strong> (servidor)</td><td><code>java -cp . MatchServer</code></td></tr>
+  <tr><td><strong>.16</strong> e <strong>.17</strong> (jogadores)</td><td><code>java -cp . Player</code></td></tr>
+  <tr><td>Qualquer uma (display, opcional)</td><td><code>java -cp . Display</code> em outro terminal</td></tr>
+</table>
+<p class="note">O primeiro a ser iniciado precisa ser o <strong>servidor</strong> (<code>MatchServer</code>). Depois, inicie os displays e um <code>Player</code> em cada máquina jogadora. O repositório precisa estar na mesma versão em todas as máquinas; recompile tudo ao atualizar.</p>
+
+<h3>Jogando</h3>
+<p>No turno de cada jogador o terminal pede o número da casa (<code>0</code> a <code>8</code>):</p>
+<pre><code>0 | 1 | 2
+3 | 4 | 5
+6 | 7 | 8</code></pre>
+<p>Entrada inválida ou casa ocupada é recusada e você digita de novo. Ao final, os dois terminais e o Display mostram vitória (X ou O) ou empate. <code>Ctrl+C</code> encerra qualquer programa.</p>
+
+<h2 id="mensagens">Mensagens</h2>
+<h3>RMI: pedido e resposta</h3>
+<pre><code>pedido:    {"ip":"152.92.236.16","porta":5000,"protocolo":"tcp"}
+sucesso:   {"ip":"152.92.236.17","porta":5001,"inicia":true}
+erro:      {"erro":"TIMEOUT","mensagem":"Nenhum oponente encontrado em 300 segundos."}</code></pre>
+<p>Códigos de erro: <code>INVALID_REQUEST</code>, <code>DUPLICATE</code>, <code>TIMEOUT</code>, <code>INTERRUPTED</code>.</p>
+
+<h3>TCP: jogada e controles (um JSON por linha)</h3>
+<pre><code>inicio:    {"evento":"inicio","partidaId":"UUID"}
+jogada:    {"Numero":0,"Jogada":4,"Tabuleiro":[0,0,0,0,1,0,0,0,0],"Resultado":"jog"}
+rejeicao:  {"evento":"rejeicao","partidaId":"UUID","motivo":"Casa ocupada.","refazer":true}
+fim:       {"evento":"fim","partidaId":"UUID","status":"vitoria","vencedor":1}
+confirma:  {"evento":"confirmacao_fim","partidaId":"UUID"}</code></pre>
+<p>Tabuleiro: nove inteiros, <code>0</code> vazia, <code>1</code> X, <code>2</code> O. <code>Resultado</code>: <code>jog</code>, <code>vit</code> ou <code>emp</code>.</p>
+
+<h3>Multicast: snapshot</h3>
+<pre><code>{"partidaId":"UUID","jogada":{"Numero":0,"Jogada":4,"Tabuleiro":[0,0,0,0,1,0,0,0,0],"Resultado":"jog"}}</code></pre>
+
+<h2 id="regras">Regras aplicadas</h2>
+<h3>Jogo</h3>
+<ul>
+  <li>Quem recebe <code>inicia=true</code> joga primeiro e usa X; o outro usa O. Os jogadores alternam.</li>
+  <li>Casas de <code>0</code> a <code>8</code>; casa ocupada ou fora do intervalo é inválida.</li>
+  <li><code>Numero</code> é o contador global da partida (<code>0</code> a <code>8</code>); só jogadas aceitas o fazem avançar.</li>
+  <li>Jogada inválida é rejeitada com o motivo; o tabuleiro e o contador não mudam e o autor refaz.</li>
+  <li>Vence quem completa linha, coluna ou diagonal; nove jogadas sem vencedor é empate.</li>
+  <li>O fim é informado e confirmado entre os dois jogadores.</li>
+</ul>
+
+<h3>Prazos</h3>
+<table>
+  <tr><th>Situação</th><th>Prazo</th><th>Reação</th></tr>
+  <tr><td>Esperar um adversário no servidor</td><td>300 s</td><td>Pedido removido, resposta <code>TIMEOUT</code></td></tr>
+  <tr><td>Conectar/aceitar a conexão TCP</td><td>120 s</td><td>Encerra com erro</td></tr>
+  <tr><td>Esperar a jogada ou resposta do adversário</td><td>120 s</td><td>Encerra por inatividade</td></tr>
+  <tr><td>Esperar <code>confirmacao_fim</code></td><td>120 s</td><td>Encerra com erro</td></tr>
+</table>
+
+<h3>Pareamento</h3>
+<ul>
+  <li>Só se pareiam jogadores com o <strong>mesmo protocolo</strong>.</li>
+  <li>Ordem de chegada: o primeiro da fila recebe <code>inicia=true</code>.</li>
+  <li>Pedido repetido (mesmo IP, porta e protocolo) é recusado com <code>DUPLICATE</code>.</li>
+  <li>Sem nova tentativa automática; depois de um <code>TIMEOUT</code>, o jogador pede de novo se quiser.</li>
+</ul>
+
+<h3>Mensagens</h3>
+<ul>
+  <li>UTF-8, um JSON por linha, no máximo 16384 caracteres.</li>
+  <li>JSON ilegível ou codificação inválida encerra a partida com erro; jogada legível mas inválida só é rejeitada.</li>
+  <li>A conexão aceita precisa vir do IP do adversário indicado pelo servidor.</li>
+</ul>
+
+<h2 id="falhas">Resposta a falhas</h2>
+<table>
+  <tr><th>Falha</th><th>O que acontece</th></tr>
+  <tr><td>Servidor RMI fora do ar</td><td>Player mostra o erro e termina com saída 1, sem nova tentativa.</td></tr>
+  <tr><td>Sem adversário em 300 s</td><td><code>TIMEOUT</code>; o usuário decide se tenta de novo.</td></tr>
+  <tr><td>Adversário desconecta</td><td>Quem fica detecta, avisa e encerra com erro, sem declarar vitória.</td></tr>
+  <tr><td>Adversário não responde em 120 s</td><td>Encerramento por inatividade, nos dois lados quando possível.</td></tr>
+  <tr><td>Jogada inválida</td><td>Rejeição com motivo; refazer sem perder o prazo original.</td></tr>
+  <tr><td>Display fechado ou ausente</td><td>A partida continua normalmente.</td></tr>
+  <tr><td>Falha ao publicar no multicast</td><td>Aviso no terminal; só o multicast é desativado.</td></tr>
+  <tr><td>Datagrama inválido no Display</td><td>Descartado com aviso; o Display continua escutando.</td></tr>
+</table>
+</main>
+</body>
+</html>
