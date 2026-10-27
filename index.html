@@ -67,7 +67,7 @@
 <p>
   Dois jogadores se encontram por um <strong>servidor de match (RMI)</strong>, jogam direto entre si por
   <strong>socket TCP</strong> e cada jogada aceita é divulgada por <strong>multicast UDP</strong>
-  para quantos <strong>displays</strong> estiverem escutando.
+  para quantos <strong>displays</strong> estiverem escutando. Os arquivos Fontes encontram-se no dentro do diretorio ~/ArquivosParaAvaliacaoJogoDaVelha
 </p>
 <nav>
   <a href="#visao">Visão geral</a>
@@ -149,6 +149,40 @@ java -cp . MatchServer</code></pre>
 </table>
 <p class="note">O primeiro a ser iniciado precisa ser o <strong>servidor</strong> (<code>MatchServer</code>). Depois, inicie os displays e um <code>Player</code> em cada máquina jogadora. O repositório precisa estar na mesma versão em todas as máquinas; recompile tudo ao atualizar.</p>
 
+<h3>Variáveis de ambiente</h3>
+<p>Os programas leem a configuração por variáveis de ambiente. Se uma variável não for definida, o programa usa o valor padrão. Variáveis marcadas como <strong>obrigatórias</strong> não têm padrão: sem elas, o programa termina com "Configuração inválida".</p>
+<table>
+  <tr><th>Variável</th><th>Usada por</th><th>Padrão</th><th>Descrição</th></tr>
+  <tr><td><code>RMI_HOST</code></td><td>MatchServer, Player</td><td><code>152.92.236.14</code></td><td>Endereço do servidor de match (RMIRegistry)</td></tr>
+  <tr><td><code>RMI_REGISTRY_PORT</code></td><td>MatchServer, Player</td><td><code>9821</code></td><td>Porta do RMIRegistry</td></tr>
+  <tr><td><code>RMI_SERVICE_NAME</code></td><td>MatchServer, Player</td><td><code>MatchService21</code></td><td>Nome do serviço registrado</td></tr>
+  <tr><td><code>RMI_OBJECT_PORT</code></td><td>MatchServer</td><td><strong>obrigatória</strong></td><td>Porta fixa do objeto remoto</td></tr>
+  <tr><td><code>MATCH_TIMEOUT_SECONDS</code></td><td>MatchServer</td><td><code>300</code></td><td>Prazo para encontrar adversário, em segundos</td></tr>
+  <tr><td><code>PLAYER_IP</code></td><td>Player</td><td>IP local (<code>getLocalHost</code>)</td><td>IP anunciado ao servidor de match</td></tr>
+  <tr><td><code>PLAYER_PORT</code></td><td>Player</td><td><code>0</code> (porta livre)</td><td>Porta TCP de escuta do jogador</td></tr>
+  <tr><td><code>PLAYER_PROTOCOL</code></td><td>Player</td><td><code>tcp</code></td><td>Somente <code>tcp</code> nesta etapa</td></tr>
+  <tr><td><code>MULTICAST_GROUP</code></td><td>Player, Display</td><td><code>225.1.1.21</code></td><td>Grupo multicast</td></tr>
+  <tr><td><code>MULTICAST_PORT</code></td><td>Player, Display</td><td><code>8821</code></td><td>Porta do grupo multicast</td></tr>
+  <tr><td><code>MULTICAST_INTERFACE</code></td><td>Player, Display</td><td><strong>obrigatória</strong></td><td>Interface de rede local (<code>enX0</code> nas VMs)</td></tr>
+  <tr><td><code>MULTICAST_TTL</code></td><td>Player, Display</td><td><code>1</code></td><td>TTL do datagrama (<code>0</code> a <code>255</code>)</td></tr>
+</table>
+
+<p>Exemplo nas VMs, definindo as variáveis antes de executar:</p>
+<pre><code># .14 (servidor)
+export RMI_HOST=152.92.236.14
+export RMI_REGISTRY_PORT=9821
+export RMI_OBJECT_PORT=9822
+java -cp . MatchServer
+
+# .16 e .17 (jogadores)
+export RMI_HOST=152.92.236.14
+export MULTICAST_INTERFACE=enX0
+java -cp . Player
+
+# Display (qualquer máquina)
+export MULTICAST_INTERFACE=enX0
+java -cp . Display</code></pre>
+
 <h3>Jogando</h3>
 <p>No turno de cada jogador o terminal pede o número da casa (<code>0</code> a <code>8</code>):</p>
 <pre><code>0 | 1 | 2
@@ -185,7 +219,7 @@ confirma:  {"evento":"confirmacao_fim","partidaId":"UUID"}</code></pre>
   <li>O fim é informado e confirmado entre os dois jogadores.</li>
 </ul>
 
-<h3>Prazos</h3>
+<h3>Timeouts</h3>
 <table>
   <tr><th>Situação</th><th>Prazo</th><th>Reação</th></tr>
   <tr><td>Esperar um adversário no servidor</td><td>300 s</td><td>Pedido removido, resposta <code>TIMEOUT</code></td></tr>
